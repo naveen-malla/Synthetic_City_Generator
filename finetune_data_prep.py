@@ -38,7 +38,7 @@ def generate_jsonl(file_path, prompt_len, completion_len, include_prompt_in_comp
             # Write to JSONL file in 'messages' format
             json_line = {
                 "messages": [
-                    {"role": "system", "content": "This assistant helps you recall coordinate sequences exactly."},
+                    {"role": "system", "content": "This assistant is trained to recall the next sequence of coordinates exactly, based on learned patterns from training data. It should output only the precise continuation of the input sequence without deviation."},
                     {"role": "user", "content": prompt_pairs},
                     {"role": "assistant", "content": completion_pairs}
                 ]
@@ -54,7 +54,7 @@ def generate_jsonl(file_path, prompt_len, completion_len, include_prompt_in_comp
 file_path = 'quantized_coordinates.csv'  # Path to the CSV file
 prompt_len = 20       # Length of the prompt (number of coordinate pairs)
 completion_len = 5   # Length of the completion (number of coordinate pairs)
-include_prompt_in_completion = True  # Set to False if you don't want prompt pairs in the completion
+include_prompt_in_completion = False  # Set to False if you don't want prompt pairs in the completion
 
 # Generate JSONL file for larger sequence prediction
 generate_jsonl(file_path, prompt_len, completion_len, include_prompt_in_completion)
