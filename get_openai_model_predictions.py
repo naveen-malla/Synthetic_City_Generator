@@ -52,8 +52,10 @@ def predict_coordinates(file_path):
         ]
 
         # API call to get the prediction
+        # Training loss: .49 ft:gpt-4o-mini-2024-07-18:personal:trier-20-5-prompt-excluded:ANdk2pgd
+        # Training loss: .96 ft:gpt-4o-mini-2024-07-18:personal:trier-20-5-prompt-excluded:ANNq48Mj 
         completion = client.chat.completions.create(
-            model="ft:gpt-4o-mini-2024-07-18:personal:trier-20-5-prompt-excluded:ANNq48Mj",
+            model="ft:gpt-4o-mini-2024-07-18:personal:trier-20-5-prompt-excluded:ANdk2pgd",
             messages=messages
         )
         
