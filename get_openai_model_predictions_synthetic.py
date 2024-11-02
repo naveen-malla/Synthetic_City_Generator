@@ -96,7 +96,7 @@ generated_coordinates = generate_full_sequence(
 )
 
 # Save output to a JSON file
-output_file = 'generated_coordinates_synthetic.json'
+output_file = 'prediction_results_synthetic.json'
 with open(output_file, 'w') as f:
     json.dump(generated_coordinates, f, indent=4)
 
