@@ -1,3 +1,7 @@
 geopandas
 networkx
 OpenAI
+sci-kit-learn
+scipy
+numpy
+matplotlib
