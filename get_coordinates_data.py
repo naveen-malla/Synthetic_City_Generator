@@ -15,6 +15,9 @@ def process_city(city_name):
                                 network_type='drive',
                                 custom_filter='["highway"~"primary|secondary|residential|motorway"]')
         
+        # Remove self-loops
+        G.remove_edges_from(nx.selfloop_edges(G))
+        
         # Extract node coordinates
         nodes, _ = ox.graph_to_gdfs(G)
         nodes = nodes[['y', 'x']]
