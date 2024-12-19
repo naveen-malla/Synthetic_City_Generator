@@ -21,17 +21,25 @@ class VariationalGCNEncoder(torch.nn.Module):
         x = self.conv1(x, edge_index).relu()
         return self.conv_mu(x, edge_index), self.conv_logstd(x, edge_index)
 
-def load_and_process_data(data_dir):
+def load_and_process_data(data_dir, size_limit):
     matrices = []
     features_list = []
     
     cities = [f.split('_')[0] for f in os.listdir(os.path.join(data_dir, 'adj_matrices')) 
              if f.endswith('_adj.npy')]
     
+    print(f"\nProcessing cities with size limit: {size_limit}")
+    print("-" * 50)
+    
     for city in cities:
         # Load adjacency matrix
         adj_file = os.path.join(data_dir, 'adj_matrices', f'{city}_adj.npy')
         adj_matrix = np.load(adj_file)
+        
+        # Check size limit
+        if adj_matrix.shape[0] > size_limit:
+            continue
+            
         adj_matrix = (adj_matrix > 0).astype(float)
         
         # Load coordinates
@@ -47,6 +55,7 @@ def load_and_process_data(data_dir):
         features_list.append(node_features)
         print(f"Loaded {city}: Shape {adj_matrix.shape}")
     
+    print(f"\nTotal cities loaded: {len(matrices)}")
     return matrices, features_list
 
 def train_epoch(model, optimizer, data, edge_index):
@@ -82,9 +91,17 @@ def train_epoch(model, optimizer, data, edge_index):
     return total_loss
 
 
+
 def main():
-    # Load data
-    matrices, features_list = load_and_process_data('data')
+    # Set size limit for cities
+    size_limit = 2000  # You can change this value to test different limits
+    
+    # Load data with size limit
+    matrices, features_list = load_and_process_data('data', size_limit)
+    
+    if len(matrices) == 0:
+        print("No cities found within the size limit!")
+        return
     
     # Model parameters
     in_channels = 2  # x,y coordinates
@@ -97,6 +114,11 @@ def main():
     
     # Training
     epochs = 100
+    best_val_auc = 0
+    patience = 20
+    counter = 0
+    
+    print("\nTraining VGAE on filtered street networks...")
     for epoch in range(1, epochs + 1):
         total_loss = 0
         
@@ -117,6 +139,17 @@ def main():
             auc = roc_auc_score(val_adj.flatten(), pred_adj.flatten())
             ap = average_precision_score(val_adj.flatten(), pred_adj.flatten())
         
+        # Early stopping
+        if auc > best_val_auc:
+            best_val_auc = auc
+            counter = 0
+        else:
+            counter += 1
+            
+        if counter >= patience:
+            print(f'\nEarly stopping at epoch {epoch}')
+            break
+            
         if epoch % 10 == 0:
             print(f'Epoch: {epoch:03d}, Loss: {total_loss/len(matrices):.4f}, '
                   f'Val AUC: {auc:.4f}, Val AP: {ap:.4f}')
