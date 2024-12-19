@@ -40,7 +40,7 @@ def process_city(city_name):
 
 def main():
     # Read cities from file
-    with open('cities.txt', 'r') as f:
+    with open('cities_germany.txt', 'r') as f:
         cities = [line.strip() for line in f if line.strip()]
     
     # Process each city
