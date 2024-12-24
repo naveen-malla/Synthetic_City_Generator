@@ -43,7 +43,7 @@ class ImprovedVGAEDecoder(torch.nn.Module):
         h = torch.cat([z, x], dim=1)
         return self.decoder(h)
 
-def load_and_process_matrices(data_dir):
+def load_and_process_matrices(data_dir, min_nodes=50, max_nodes=100):
     matrices = []
     features_list = []
     
@@ -55,6 +55,9 @@ def load_and_process_matrices(data_dir):
         adj_file = os.path.join(data_dir, 'adj_matrices', f'{city}_adj.npy')
         adj_matrix = np.load(adj_file)
         adj_matrix = (adj_matrix > 0).astype(float)
+        
+        if adj_matrix.shape[0] < min_nodes or adj_matrix.shape[0] > max_nodes:
+            continue
         
         # Load and convert coordinates
         coord_file = os.path.join(data_dir, 'coordinates/transformed', f'{city}_coords.npy')
@@ -110,7 +113,9 @@ def train_epoch(model, optimizer, data, edge_index):
 
 
 def main():
-    matrices, features_list = load_and_process_matrices('data')
+    min_nodes = 50
+    max_nodes = 100
+    matrices, features_list = load_and_process_matrices('data', min_nodes, max_nodes)
     
     model = VGAE(
         encoder=ImprovedVGAEEncoder(
