@@ -43,37 +43,87 @@ class ImprovedVGAEDecoder(torch.nn.Module):
         h = torch.cat([z, x], dim=1)
         return self.decoder(h)
 
-def load_and_process_matrices(data_dir, min_nodes=50, max_nodes=100):
+def load_and_process_matrices(data_dir, min_nodes, max_nodes):
     matrices = []
     features_list = []
+    processed_cities = []
     
-    cities = [f.split('_')[0] for f in os.listdir(os.path.join(data_dir, 'adj_matrices')) 
-             if f.endswith('_adj.npy')]
+    print(f"\nProcessing cities with size range: {min_nodes} - {max_nodes}")
+    print("-" * 50)
     
-    for city in cities:
-        # Load adjacency matrix
-        adj_file = os.path.join(data_dir, 'adj_matrices', f'{city}_adj.npy')
-        adj_matrix = np.load(adj_file)
-        adj_matrix = (adj_matrix > 0).astype(float)
+    try:
+        adj_dir = os.path.join(data_dir, 'adj_matrices')
+        coord_dir = os.path.join(data_dir, 'coordinates/transformed')
         
-        if adj_matrix.shape[0] < min_nodes or adj_matrix.shape[0] > max_nodes:
-            continue
+        # Verify directories exist
+        if not os.path.exists(adj_dir) or not os.path.exists(coord_dir):
+            raise ValueError(f"Required directories not found in {data_dir}")
         
-        # Load and convert coordinates
-        coord_file = os.path.join(data_dir, 'coordinates/transformed', f'{city}_coords.npy')
-        structured_coords = np.load(coord_file)
-        # Extract only y and x coordinates and stack them
-        coordinates = np.column_stack((structured_coords['y'], structured_coords['x'])).astype(np.float32)
+        # Get list of cities from adjacency matrices
+        cities = [f.split('_adj.npy')[0] for f in os.listdir(adj_dir) 
+                 if f.endswith('_adj.npy')]
         
-        # Convert to torch tensors
-        node_features = torch.FloatTensor(coordinates)
-        edge_index, _ = dense_to_sparse(torch.FloatTensor(adj_matrix))
+        print(f"Found {len(cities)} potential cities")
         
-        matrices.append((edge_index, adj_matrix))
-        features_list.append(node_features)
-        print(f"Loaded {city}: Shape {adj_matrix.shape}")
-    
-    return matrices, features_list
+        for city in cities:
+            adj_file = os.path.join(adj_dir, f'{city}_adj.npy')
+            coord_file = os.path.join(coord_dir, f'{city}_coords.npy')
+            
+            # Check file existence
+            if not os.path.exists(adj_file) or not os.path.exists(coord_file):
+                print(f"Skipping {city}: Missing required files")
+                continue
+            
+            # Load adjacency matrix
+            try:
+                adj_matrix = np.load(adj_file)
+                matrix_size = adj_matrix.shape[0]
+                
+                # Check size constraints
+                if matrix_size < min_nodes or matrix_size > max_nodes:
+                    # print(f"Skipping {city}: Size {matrix_size} outside range [{min_nodes}, {max_nodes}]")
+                    continue
+                
+                # Convert to binary adjacency matrix
+                adj_matrix = (adj_matrix > 0).astype(float)
+                
+                # Load and process coordinates
+                structured_coords = np.load(coord_file)
+                coordinates = np.column_stack((structured_coords['y'], 
+                                            structured_coords['x'])).astype(np.float32)
+                
+                # Verify dimensions match
+                if coordinates.shape[0] != matrix_size:
+                    print(f"Skipping {city}: Size mismatch - Adj: {matrix_size}, Coords: {coordinates.shape[0]}")
+                    continue
+                
+                # Convert to torch tensors
+                node_features = torch.FloatTensor(coordinates)
+                edge_index, _ = dense_to_sparse(torch.FloatTensor(adj_matrix))
+                
+                matrices.append((edge_index, adj_matrix))
+                features_list.append(node_features)
+                processed_cities.append(city)
+                print(f"Loaded {city}: Shape {adj_matrix.shape}")
+                
+            except Exception as e:
+                print(f"Error processing {city}: {str(e)}")
+                continue
+        
+        print(f"\nSuccessfully loaded {len(matrices)} cities")
+        print(f"Size range: {min_nodes}-{max_nodes} nodes")
+        print(f"Processed cities: {', '.join(processed_cities)}")
+        
+        if len(matrices) == 0:
+            raise ValueError(f"No valid cities found within size range {min_nodes}-{max_nodes}")
+        
+        return matrices, features_list, processed_cities
+        
+    except Exception as e:
+        print(f"Fatal error in data loading: {str(e)}")
+        raise
+
+
 
 
 def train_epoch(model, optimizer, data, edge_index):
@@ -113,10 +163,15 @@ def train_epoch(model, optimizer, data, edge_index):
 
 
 def main():
-    min_nodes = 50
-    max_nodes = 100
-    matrices, features_list = load_and_process_matrices('data', min_nodes, max_nodes)
+    # Set size range for cities
+    min_nodes = 50  # Minimum number of nodes
+    max_nodes = 100  # Maximum number of nodes
     
+    # Load data with size constraints
+    matrices, features_list, processed_cities = load_and_process_matrices('data', min_nodes, max_nodes)
+    
+    print(f"\nTraining on {len(processed_cities)} cities within size range {min_nodes}-{max_nodes}")
+
     model = VGAE(
         encoder=ImprovedVGAEEncoder(
             in_channels=2,  # Only x,y coordinates
@@ -187,7 +242,7 @@ def main():
             pred_adj = torch.sigmoid(torch.matmul(z, z.t())).cpu().numpy()
             auc = roc_auc_score(adj_matrix.flatten(), pred_adj.flatten())
             ap = average_precision_score(adj_matrix.flatten(), pred_adj.flatten())
-            print(f"City {idx+1} - Test AUC: {auc:.4f}, AP: {ap:.4f}")
+            print(f"{processed_cities[idx]} - Test AUC: {auc:.4f}, AP: {ap:.4f}")
 
 if __name__ == "__main__":
     main()
