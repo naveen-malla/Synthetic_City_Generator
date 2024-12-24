@@ -53,21 +53,64 @@ def create_node_features(adj_matrix):
     features = (features - features.mean(0)) / (features.std(0) + 1e-8)
     return torch.FloatTensor(features)
 
-def load_and_process_matrices(data_dir):
+def load_and_process_matrices(data_dir, min_nodes, max_nodes):
     matrices = []
     features_list = []
+    processed_cities = []
     
-    for file in os.listdir(data_dir):
-        if file.endswith('_adj.npy'):
-            adj_matrix = np.load(os.path.join(data_dir, file))
+    print(f"\nProcessing cities with size range: {min_nodes} - {max_nodes}")
+    print("-" * 50)
+    
+    try:
+        # Get list of cities from adjacency matrices
+        adj_files = [f for f in os.listdir(data_dir) if f.endswith('_adj.npy')]
+        
+        print(f"Found {len(adj_files)} potential cities")
+        
+        for adj_file in adj_files:
+            city = adj_file.replace('_adj.npy', '')
+            
+            # Load and check adjacency matrix size
+            adj_matrix = np.load(os.path.join(data_dir, adj_file))
+            matrix_size = adj_matrix.shape[0]
+            
+            # Skip if size is outside range
+            if matrix_size < min_nodes or matrix_size > max_nodes:
+                #print(f"Skipping {city}: Size {matrix_size} outside range [{min_nodes}, {max_nodes}]")
+                continue
+                
             adj_matrix = (adj_matrix > 0).astype(float)
-            node_features = create_node_features(adj_matrix)
-            edge_index, _ = dense_to_sparse(torch.FloatTensor(adj_matrix))
-            matrices.append((edge_index, adj_matrix))
-            features_list.append(node_features)
-            print(f"Loaded {file}: Shape {adj_matrix.shape}")
+            
+            try:
+                # Create node features
+                node_features = create_node_features(adj_matrix)
+                edge_index, _ = dense_to_sparse(torch.FloatTensor(adj_matrix))
+                
+                matrices.append((edge_index, adj_matrix))
+                features_list.append(node_features)
+                processed_cities.append(city)
+                print(f"Loaded {city}: Shape {adj_matrix.shape}")
+                
+            except Exception as e:
+                print(f"Error processing {city}: {str(e)}")
+                continue
+        
+        print(f"\nSuccessfully loaded {len(matrices)} cities")
+        print(f"Size range: {min_nodes}-{max_nodes} nodes")
+        
+        if len(matrices) == 0:
+            raise ValueError(f"No valid cities found within size range {min_nodes}-{max_nodes}")
+        
+        return matrices, features_list, processed_cities
+        
+    except Exception as e:
+        print(f"Fatal error in data loading: {str(e)}")
+        raise
+
+
     
-    return matrices, features_list
+    
+
 
 def train_epoch(model, optimizer, data, edge_index):
     model.train()
@@ -82,7 +125,12 @@ def train_epoch(model, optimizer, data, edge_index):
     return total_loss
 
 def main():
-    matrices, features_list = load_and_process_matrices('data/adj_matrices')
+    # Set size range for cities
+    min_nodes = 50  # Minimum number of nodes
+    max_nodes = 100  # Maximum number of nodes
+    
+    # Load data with size constraints
+    matrices, features_list, processed_cities = load_and_process_matrices('data/adj_matrices', min_nodes, max_nodes)
     
     in_channels = features_list[0].shape[1]
     model = VGAE(ImprovedVGAEEncoder(
@@ -152,7 +200,7 @@ def main():
             pred_adj = torch.sigmoid(torch.matmul(z, z.t())).cpu().numpy()
             auc = roc_auc_score(adj_matrix.flatten(), pred_adj.flatten())
             ap = average_precision_score(adj_matrix.flatten(), pred_adj.flatten())
-            print(f"City {idx+1} - Test AUC: {auc:.4f}, AP: {ap:.4f}")
+            print(f"{processed_cities[idx]} - Test AUC: {auc:.4f}, AP: {ap:.4f}")
 
 if __name__ == "__main__":
     main()
