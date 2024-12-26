@@ -137,7 +137,7 @@ def main():
     max_nodes = 100  # Maximum number of nodes
     
     # Load data with size constraints
-    matrices, features_list, processed_cities = load_and_process_matrices('data/adj_matrices', min_nodes, max_nodes)
+    matrices, features_list, processed_cities = load_and_process_matrices('data/adj_matrices/center', min_nodes, max_nodes)
     
     in_channels = features_list[0].shape[1]
     model = VGAE(ImprovedVGAEEncoder(
