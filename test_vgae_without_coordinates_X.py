@@ -13,6 +13,16 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 # Set random seed
 torch.manual_seed(42)
 
+# Device selection
+if torch.backends.mps.is_available():
+    device = torch.device("mps")
+elif torch.cuda.is_available():
+    device = torch.device("cuda")
+else:
+    device = torch.device("cpu")
+
+print(f"Using device: {device}")
+
 class ImprovedVGAEEncoder(torch.nn.Module):
     def __init__(self, in_channels, hidden_channels, out_channels, dropout=0.3):
         super(ImprovedVGAEEncoder, self).__init__()
@@ -24,6 +34,8 @@ class ImprovedVGAEEncoder(torch.nn.Module):
         self.dropout = torch.nn.Dropout(dropout)
 
     def forward(self, x, edge_index):
+        x = x.to(device)
+        edge_index = edge_index.to(device)
         x1 = F.relu(self.conv1(x, edge_index))
         x1 = self.dropout(x1)
         x2 = F.relu(self.conv2(x1, edge_index))
@@ -107,11 +119,6 @@ def load_and_process_matrices(data_dir, min_nodes, max_nodes):
         print(f"Fatal error in data loading: {str(e)}")
         raise
 
-
-    
-    
-
-
 def train_epoch(model, optimizer, data, edge_index):
     model.train()
     optimizer.zero_grad()
@@ -126,7 +133,7 @@ def train_epoch(model, optimizer, data, edge_index):
 
 def main():
     # Set size range for cities
-    min_nodes = 50  # Minimum number of nodes
+    min_nodes = 10  # Minimum number of nodes
     max_nodes = 100  # Maximum number of nodes
     
     # Load data with size constraints
@@ -138,7 +145,7 @@ def main():
         hidden_channels=512,
         out_channels=256,
         dropout=0.3
-    ))
+    )).to(device)
     
     optimizer = torch.optim.AdamW(model.parameters(), lr=0.0003, weight_decay=1e-5)
     scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.7, patience=10)
@@ -152,13 +159,14 @@ def main():
         total_loss = 0
         
         for idx, ((edge_index, adj_matrix), features) in enumerate(zip(matrices, features_list)):
-            data = Data(x=features, edge_index=edge_index)
-            loss = train_epoch(model, optimizer, data, edge_index)
+            data = Data(x=features, edge_index=edge_index).to(device)
+            loss = train_epoch(model, optimizer, data, edge_index.to(device))
             total_loss += loss.item()
         
         val_idx = np.random.randint(len(matrices))
         val_edge_index, val_adj = matrices[val_idx]
-        val_features = features_list[val_idx]
+        val_features = features_list[val_idx].to(device)
+        val_edge_index = val_edge_index.to(device)
         
         model.eval()
         with torch.no_grad():
@@ -189,14 +197,14 @@ def main():
             print(f'Early stopping at epoch {epoch}')
             break
     
-    checkpoint = torch.load('best_vgae_model.pt')
+    checkpoint = torch.load('best_vgae_model.pt', map_location=device)
     model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
     
     print("\nFinal Evaluation on Each City:")
     for idx, ((edge_index, adj_matrix), features) in enumerate(zip(matrices, features_list)):
         with torch.no_grad():
-            z = model.encode(features, edge_index)
+            z = model.encode(features.to(device), edge_index.to(device))
             pred_adj = torch.sigmoid(torch.matmul(z, z.t())).cpu().numpy()
             auc = roc_auc_score(adj_matrix.flatten(), pred_adj.flatten())
             ap = average_precision_score(adj_matrix.flatten(), pred_adj.flatten())
