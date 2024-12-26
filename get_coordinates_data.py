@@ -33,31 +33,45 @@ def quantize_coordinates(nodes):
     return nodes
 
 def process_city_whole(city_name, mode):
-    """Process the entire city network"""
-    print(f"Processing whole city: {city_name}...")
+    print(f"Processing {city_name}...")
     try:
-        G = ox.graph_from_place(city_name,
+        # Check if files already exist
+        clean_name = f"{city_name.split(',')[0].lower().replace(' ', '_')}"
+        original_path = data_dirs[mode]['original'] / f"{clean_name}_coords.npy"
+        transformed_path = data_dirs[mode]['transformed'] / f"{clean_name}_coords.npy"
+        
+        if original_path.exists() and transformed_path.exists():
+            print(f"Files already exist for {city_name} ({mode}). Skipping download...")
+            return np.load(original_path), np.load(transformed_path)
+            
+        # Download street network if files don't exist
+        print(f"Downloading new data for {city_name}...")
+        G = ox.graph_from_place(city_name, 
                               network_type='drive',
                               custom_filter='["highway"~"primary|secondary|residential|motorway"]')
-        
         return process_graph(G, city_name, mode)
     except Exception as e:
         print(f"Error processing {city_name}: {e}")
 
 def process_city_center(city_name, mode):
-    """Process 1km x 1km area around city center"""
     print(f"Processing city center: {city_name}...")
     try:
-        # Get city center coordinates
-        center_point = ox.geocoder.geocode(city_name)
-        print(f"City center coordinates (lat, lon): {center_point}")
+        # Check if files already exist
+        clean_name = f"{city_name.split(',')[0].lower().replace(' ', '_')}"
+        original_path = data_dirs[mode]['original'] / f"{clean_name}_coords.npy"
+        transformed_path = data_dirs[mode]['transformed'] / f"{clean_name}_coords.npy"
         
-        # Get 1km x 1km area (500m radius)
+        if original_path.exists() and transformed_path.exists():
+            print(f"Files already exist for {city_name} ({mode}). Skipping download...")
+            return np.load(original_path), np.load(transformed_path)
+            
+        # Get city center coordinates and download if files don't exist
+        print(f"Downloading new data for {city_name} center...")
+        center_point = ox.geocoder.geocode(city_name)
         G = ox.graph_from_point(center_point, 
                               dist=500,
                               network_type='drive',
                               custom_filter='["highway"~"primary|secondary|residential|motorway"]')
-        
         return process_graph(G, city_name, mode)
     except Exception as e:
         print(f"Error processing {city_name}: {e}")

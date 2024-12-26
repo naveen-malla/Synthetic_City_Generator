@@ -17,7 +17,16 @@ for dir_path in data_dirs.values():
 def process_city_whole(city_name, mode):
     print(f"Processing {city_name}...")
     try:
-        # Download street network
+        # Check if file already exists
+        clean_name = f"{city_name.split(',')[0].lower().replace(' ', '_')}"
+        file_path = data_dirs[mode] / f"{clean_name}_adj.npy"
+        
+        if file_path.exists():
+            print(f"File already exists for {city_name} ({mode}). Skipping download...")
+            return np.load(file_path)
+            
+        # Download street network if file doesn't exist
+        print(f"Downloading new data for {city_name}...")
         G = ox.graph_from_place(city_name, 
                               network_type='drive',
                               custom_filter='["highway"~"primary|secondary|residential|motorway"]')
@@ -31,7 +40,16 @@ def process_city_whole(city_name, mode):
 def process_city_center(city_name, mode):
     print(f"Processing city center: {city_name}...")
     try:
-        # Get city center coordinates
+        # Check if file already exists
+        clean_name = f"{city_name.split(',')[0].lower().replace(' ', '_')}"
+        file_path = data_dirs[mode] / f"{clean_name}_adj.npy"
+        
+        if file_path.exists():
+            print(f"File already exists for {city_name} ({mode}). Skipping download...")
+            return np.load(file_path)
+            
+        # Get city center coordinates and download if file doesn't exist
+        print(f"Downloading new data for {city_name} center...")
         center_point = ox.geocoder.geocode(city_name)
         print(f"City center coordinates (lat, lon): {center_point}")
         
