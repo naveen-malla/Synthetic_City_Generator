@@ -39,10 +39,6 @@ def get_city_graph():
             close=False
         )
         
-        # Save plot
-        plt_path = Path('trier_center.png')
-        fig.savefig(plt_path, dpi=300, bbox_inches='tight')
-        print(f"Plot saved to: {plt_path.absolute()}")
         
         return G, fig, ax
         
