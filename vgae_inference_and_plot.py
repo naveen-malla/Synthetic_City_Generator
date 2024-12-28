@@ -2,28 +2,33 @@ import torch
 import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
+from torch_geometric.utils import dense_to_sparse
 from test_vgae_without_coordinates_X import ImprovedVGAEEncoder, create_node_features, VGAE
 
 def load_city_data(city_name):
     try:
-        # Load coordinates
+        # Load coordinates and adjacency matrix
         coord_path = f'data/coordinates/center/transformed/{city_name}_coords.npy'
+        adj_path = f'data/adj_matrices/center/{city_name}_adj.npy'
+        
         coords = np.load(coord_path)
-        print(f"Loaded coordinates shape: {coords.shape}")
+        adj_matrix = np.load(adj_path)
+        adj_matrix = (adj_matrix > 0).astype(float)  # Convert to binary
         
-        # Create sequential node mapping
-        num_nodes = len(coords)
-        positions = {}
-        for i in range(num_nodes):
-            positions[i] = (coords[i]['x'], coords[i]['y'])
+        # Create node features using adjacency matrix
+        node_features = create_node_features(adj_matrix)
         
-        print(f"Created positions for {len(positions)} nodes")
+        # Convert to torch tensors
+        adj_tensor = torch.FloatTensor(adj_matrix)
+        edge_index, _ = dense_to_sparse(adj_tensor)
         
-        # Create features
-        features = create_node_features(np.zeros((num_nodes, num_nodes)))
-        return features, positions
+        # Create positions dictionary for visualization
+        positions = {i: (coords[i]['x'], coords[i]['y']) for i in range(len(coords))}
+            
+        return edge_index, adj_matrix, node_features, positions
+        
     except Exception as e:
-        print(f"Error loading data: {e}")
+        print(f"Error loading city data: {str(e)}")
         raise
 
 def inference(model, features, device):
@@ -41,7 +46,7 @@ def plot_graph(adj_matrix, positions):
     
     # Ensure all nodes have positions
     missing_nodes = set(G.nodes()) - set(positions.keys())
-    if missing_nodes:
+    if (missing_nodes):
         raise ValueError(f"Missing positions for nodes: {missing_nodes}")
     
     # Plot
@@ -55,31 +60,78 @@ def plot_graph(adj_matrix, positions):
     plt.savefig('inferred_network.png', dpi=300, bbox_inches='tight')
     plt.show()
 
+def visualize_networks(city_name,adj_matrix, pred_adj, positions, threshold=0.5):
+    plt.figure(figsize=(15, 6))
+    
+    # Original network
+    plt.subplot(121)
+    G_original = nx.from_numpy_array(adj_matrix)
+    nx.draw(G_original, positions, 
+            node_size=30,
+            node_color='blue',
+            width=0.5,
+            with_labels=False)
+    plt.title(f"{city_name} Original")
+    
+    # Predicted network
+    plt.subplot(122)
+    pred_adj_binary = (pred_adj > threshold).astype(int)
+    G_pred = nx.from_numpy_array(pred_adj_binary)
+    nx.draw(G_pred, positions, 
+            node_size=30,
+            node_color='red',
+            width=0.5,
+            with_labels=False)
+    plt.title(f'{city_name} Generated')
+    
+    plt.tight_layout()
+    plt.savefig('{city_name}_comparison.png', dpi=300, bbox_inches='tight')
+    plt.show()
+
 def main():
-    # Set device
-    device = torch.device('cuda' if torch.cuda.is_available() else 'mps')
+    # Configuration
+    city_name = "meerane"  # Change this to test different cities
+    
+    # Device setup
+    device = torch.device("mps" if torch.backends.mps.is_available() else 
+                         "cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
     
     # Load city data
-    city_name = "trier"  # or any other city
-    features, positions = load_city_data(city_name)
+    print(f"\nProcessing city: {city_name}")
+    edge_index, adj_matrix, features, positions = load_city_data(city_name)
+    
+    # Initialize model
+    in_channels = features.shape[1]
+    model = VGAE(ImprovedVGAEEncoder(
+        in_channels=in_channels,
+        hidden_channels=512,
+        out_channels=256,
+        dropout=0.3
+    )).to(device)
     
     # Load best model
     checkpoint = torch.load('best_vgae_model.pt', map_location=device)
-    model = VGAE(
-        encoder=ImprovedVGAEEncoder(
-            in_channels=features.shape[1],
-            hidden_channels=512,
-            out_channels=256,
-            dropout=0.3
-        )
-    ).to(device)
     model.load_state_dict(checkpoint['model_state_dict'])
+    model.eval()
     
-    # Generate adjacency matrix
-    adj_pred = inference(model, features, device)
-    
-    # Plot result
-    plot_graph(adj_pred, positions)
+    # Inference
+    with torch.no_grad():
+        features = features.to(device)
+        edge_index = edge_index.to(device)
+        z = model.encode(features, edge_index)
+        pred_adj = torch.sigmoid(torch.matmul(z, z.t())).cpu().numpy()
+        
+        # Evaluate
+        from sklearn.metrics import roc_auc_score, average_precision_score
+        auc = roc_auc_score(adj_matrix.flatten(), pred_adj.flatten())
+        ap = average_precision_score(adj_matrix.flatten(), pred_adj.flatten())
+        print(f"{city_name} Test AUC: {auc:.4f}, AP: {ap:.4f}")
+        
+        # Visualize networks
+        visualize_networks(city_name, adj_matrix, pred_adj, positions)
+        plt.savefig(f'{city_name}_comparison.png', dpi=300, bbox_inches='tight')
+        plt.close()
 
 if __name__ == "__main__":
     main()
