@@ -2,24 +2,45 @@ import osmnx as ox
 import networkx as nx
 import numpy as np
 from pathlib import Path
+import os
 
-# Create data directories
+# Update data directories
 data_dirs = {
-    'whole': {
-        'original': Path('data/coordinates/whole/original/'),
-        'transformed': Path('data/coordinates/whole/transformed/')
+    'coordinates': {
+        'world': {
+            'whole': {
+                'original': Path('data/coordinates/world/whole/original/'),
+                'transformed': Path('data/coordinates/world/whole/transformed/')
+            },
+            'center': {
+                'original': Path('data/coordinates/world/center/original/'),
+                'transformed': Path('data/coordinates/world/center/transformed/')
+            }
+        }
     },
-    'center': {
-        'original': Path('data/coordinates/center/original/'),
-        'transformed': Path('data/coordinates/center/transformed/')
+    'adj_matrices': {
+        'world': {
+            'whole': Path('data/adj_matrices/world/whole/'),
+            'center': Path('data/adj_matrices/world/center/')
+        }
     }
 }
 
 # Create all directories
-for type_dir in data_dirs.values():
-    for dir_path in type_dir.values():
-        dir_path.mkdir(parents=True, exist_ok=True)
+for category in data_dirs.values():
+    for region in category.values():
+        if isinstance(region, dict):
+            for mode in region.values():
+                if isinstance(mode, dict):
+                    for dir_path in mode.values():
+                        dir_path.mkdir(parents=True, exist_ok=True)
+                else:
+                    mode.mkdir(parents=True, exist_ok=True)
+        else:
+            region.mkdir(parents=True, exist_ok=True)
 
+
+# Existing helper functions remain the same
 def normalize_coordinates(nodes):
     min_lat, max_lat = nodes['y'].min(), nodes['y'].max()
     min_lon, max_lon = nodes['x'].min(), nodes['x'].max()
@@ -32,52 +53,40 @@ def quantize_coordinates(nodes):
     nodes['x_quant'] = np.round(nodes['x_norm'] * 255).astype(int)
     return nodes
 
-def process_city_whole(city_name, mode):
-    print(f"Processing {city_name}...")
+def process_city(city_name, country_code, mode):
+    print(f"Processing {city_name}, {country_code}...")
     try:
-        # Check if files already exist
-        clean_name = f"{city_name.split(',')[0].lower().replace(' ', '_')}"
-        original_path = data_dirs[mode]['original'] / f"{clean_name}_coords.npy"
-        transformed_path = data_dirs[mode]['transformed'] / f"{clean_name}_coords.npy"
+        clean_name = f"{city_name.split('/')[0].strip().lower().replace(' ', '_')}_{country_code}"
+        original_path = data_dirs['coordinates']['world'][mode]['original'] / f"{clean_name}_coords.npy"
+        transformed_path = data_dirs['coordinates']['world'][mode]['transformed'] / f"{clean_name}_coords.npy"
         
         if original_path.exists() and transformed_path.exists():
-            print(f"Files already exist for {city_name} ({mode}). Skipping download...")
+            print(f"Files already exist for {city_name}, {country_code} ({mode}). Skipping download...")
             return np.load(original_path), np.load(transformed_path)
-            
-        # Download street network if files don't exist
-        print(f"Downloading new data for {city_name}...")
-        G = ox.graph_from_place(city_name, 
-                              network_type='drive',
-                              custom_filter='["highway"~"primary|secondary|residential|motorway"]')
-        return process_graph(G, city_name, mode)
-    except Exception as e:
-        print(f"Error processing {city_name}: {e}")
-
-def process_city_center(city_name, mode):
-    print(f"Processing city center: {city_name}...")
-    try:
-        # Check if files already exist
-        clean_name = f"{city_name.split(',')[0].lower().replace(' ', '_')}"
-        original_path = data_dirs[mode]['original'] / f"{clean_name}_coords.npy"
-        transformed_path = data_dirs[mode]['transformed'] / f"{clean_name}_coords.npy"
         
-        if original_path.exists() and transformed_path.exists():
-            print(f"Files already exist for {city_name} ({mode}). Skipping download...")
-            return np.load(original_path), np.load(transformed_path)
-            
-        # Get city center coordinates and download if files don't exist
-        print(f"Downloading new data for {city_name} center...")
-        center_point = ox.geocoder.geocode(city_name)
-        G = ox.graph_from_point(center_point, 
-                              dist=500,
-                              network_type='drive',
-                              custom_filter='["highway"~"primary|secondary|residential|motorway"]')
-        return process_graph(G, city_name, mode)
+        print(f"Downloading new data for {city_name}, {country_code}...")
+        center_point = ox.geocode(f"{city_name}, {country_code}")
+        if center_point is None:
+            print(f"Could not geocode {city_name}, {country_code}")
+            return None
+        
+        if mode == 'whole':
+            G = ox.graph_from_place(f"{city_name}, {country_code}", 
+                                    network_type='drive',
+                                    custom_filter='["highway"~"primary|secondary|residential|motorway"]')
+        else:  # center mode
+            G = ox.graph_from_point(center_point, 
+                                    dist=500,
+                                    network_type='drive',
+                                    custom_filter='["highway"~"primary|secondary|residential|motorway"]')
+        
+        return process_graph(G, city_name, country_code, mode)
     except Exception as e:
-        print(f"Error processing {city_name}: {e}")
+        print(f"Error processing {city_name}, {country_code}: {e}")
+        return None
 
-def process_graph(G, city_name, mode):
-    """Common graph processing logic with mode-specific paths"""
+
+def process_graph(G, city_name, country_code, mode):
     G.remove_edges_from(nx.selfloop_edges(G))
     
     nodes, _ = ox.graph_to_gdfs(G)
@@ -86,24 +95,22 @@ def process_graph(G, city_name, mode):
     nodes = normalize_coordinates(nodes)
     nodes = quantize_coordinates(nodes)
     
-    clean_name = f"{city_name.split(',')[0].lower().replace(' ', '_')}"
+    clean_name = f"{city_name.lower().replace(' ', '_')}_{country_code}"
     
     original_coords = np.array([(int(osmid), y, x) for osmid, (y, x) in nodes[['y', 'x']].iterrows()],
-                              dtype=[('osmid', np.int64), ('y', np.float64), ('x', np.float64)])
+                               dtype=[('osmid', np.int64), ('y', np.float64), ('x', np.float64)])
     
     transformed_coords = np.array([(int(osmid), y, x) for osmid, (y, x) in nodes[['y_quant', 'x_quant']].iterrows()],
-                                 dtype=[('osmid', np.int64), ('y', np.int64), ('x', np.int64)])
+                                  dtype=[('osmid', np.int64), ('y', np.int64), ('x', np.int64)])
     
-    # Save to mode-specific directories
-    np.save(data_dirs[mode]['original'] / f"{clean_name}_coords.npy", original_coords)
-    np.save(data_dirs[mode]['transformed'] / f"{clean_name}_coords.npy", transformed_coords)
+    np.save(data_dirs['coordinates']['world'][mode]['original'] / f"{clean_name}_coords.npy", original_coords)
+    np.save(data_dirs['coordinates']['world'][mode]['transformed'] / f"{clean_name}_coords.npy", transformed_coords)
     
-    print(f"Saved coordinates for {city_name} ({mode})")
+    print(f"Saved coordinates for {city_name}, {country_code} ({mode})")
     print(f"Number of nodes: {len(original_coords)}")
 
 def main():
-    with open('cities_germany.txt', 'r') as f:
-        cities = [line.strip() for line in f if line.strip()]
+    cities_folder = Path('cities')
     
     while True:
         choice = input("Choose processing mode:\n1. Whole city\n2. City center\nEnter choice (1/2): ")
@@ -112,10 +119,15 @@ def main():
         print("Invalid choice. Please enter 1 or 2.")
     
     mode = 'whole' if choice == '1' else 'center'
-    process_func = process_city_whole if choice == '1' else process_city_center
     
-    for city in cities:
-        process_func(city, mode)
+    for country_file in cities_folder.glob('*.txt'):
+        country_code = country_file.stem.split('_')[-1]
+        with open(country_file, 'r', encoding='utf-8') as f:
+            cities = [line.strip() for line in f if line.strip()]
+        
+        for city in cities:
+            process_city(city, country_code, mode)
+
 
 if __name__ == "__main__":
     main()
