@@ -126,10 +126,10 @@ def split_dataset(matrices, features_list, processed_cities, train_ratio=0.7, va
            (subset(matrices, val_indices), subset(features_list, val_indices), subset(processed_cities, val_indices)), \
            (subset(matrices, test_indices), subset(features_list, test_indices), subset(processed_cities, test_indices))
 
-def train_epoch(model, optimizer, data, edge_index):
+def train_epoch(model, optimizer, data, edge_index, device):
     model.train()
     optimizer.zero_grad()
-    data = data.to(model.device)
+    data = data.to(device)
     edge_index = edge_index.to(model.device)
     z = model.encode(data.x, edge_index)
     adj_orig = to_dense_adj(edge_index)[0]
@@ -221,6 +221,7 @@ def main():
         encoder=ImprovedVGAEEncoder(in_channels=2, hidden_channels=512, out_channels=256, dropout=0.3),
         decoder=ImprovedVGAEDecoder(latent_dim=256)
     ).to(device)
+    model.device = device
     
     optimizer = torch.optim.AdamW(model.parameters(), lr=0.0003, weight_decay=1e-5)
     scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.7, patience=10)
@@ -232,7 +233,7 @@ def main():
         total_loss = 0
         for (edge_index, adj_matrix), features in zip(*train_data[:2]):
             data = Data(x=features, edge_index=edge_index).to(device)
-            loss = train_epoch(model, optimizer, data, edge_index)
+            loss = train_epoch(model, optimizer, data, edge_index, device)
             total_loss += loss.item()
     
         val_aucs = []
