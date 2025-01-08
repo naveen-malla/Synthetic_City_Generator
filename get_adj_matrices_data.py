@@ -2,9 +2,8 @@ import osmnx as ox
 import networkx as nx
 import numpy as np
 from pathlib import Path
-import warnings
+import signal
 
-# Update data directories
 data_dirs = {
     'adj_matrices': {
         'world': {
@@ -14,11 +13,13 @@ data_dirs = {
     }
 }
 
-# Create all directories
 for category in data_dirs.values():
     for region in category.values():
         for mode in region.values():
             mode.mkdir(parents=True, exist_ok=True)
+
+def timeout_handler(signum, frame):
+    raise TimeoutError("Operation timed out")
 
 def process_city(city_name, country_code, mode):
     print(f"Processing {city_name}, {country_code}...")
@@ -36,8 +37,10 @@ def process_city(city_name, country_code, mode):
             print(f"Could not geocode {city_name}, {country_code}")
             return None
         
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(120)  # Set 120-second timeout
+        
+        try:
             if mode == 'whole':
                 G = ox.graph_from_place(f"{city_name}, {country_code}", 
                                         network_type='drive',
@@ -48,18 +51,19 @@ def process_city(city_name, country_code, mode):
                                         network_type='drive',
                                         custom_filter='["highway"~"primary|secondary|residential|motorway"]')
             
-            if any("This area is" in str(warn.message) for warn in w):
-                print(f"Skipping {city_name}, {country_code} due to large area size.")
-                return None
-        
-        # Convert to undirected graph
-        G = G.to_undirected()
-        return process_graph(G, city_name, country_code, mode)
+            signal.alarm(0)  # Cancel the alarm
+            return process_graph(G, city_name, country_code, mode)
+        except TimeoutError:
+            print(f"Timeout occurred while processing {city_name}, {country_code}")
+            return None
     except Exception as e:
         print(f"Error processing {city_name}, {country_code}: {e}")
         return None
 
 def process_graph(G, city_name, country_code, mode):
+    # Convert to undirected graph
+    G = G.to_undirected()
+    
     # Create adjacency matrix
     adj_matrix = nx.adjacency_matrix(G)
     dense_matrix = adj_matrix.todense()
