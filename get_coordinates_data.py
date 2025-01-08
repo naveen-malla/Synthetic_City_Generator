@@ -4,6 +4,9 @@ import numpy as np
 from pathlib import Path
 import os
 
+# Set a global timeout (e.g., 5 minutes)
+ox.config(timeout=300)
+
 # Update data directories
 data_dirs = {
     'coordinates': {
@@ -53,6 +56,7 @@ def quantize_coordinates(nodes):
     nodes['x_quant'] = np.round(nodes['x_norm'] * 255).astype(int)
     return nodes
 
+
 def process_city(city_name, country_code, mode):
     print(f"Processing {city_name}, {country_code}...")
     try:
@@ -70,15 +74,19 @@ def process_city(city_name, country_code, mode):
             print(f"Could not geocode {city_name}, {country_code}")
             return None
         
-        if mode == 'whole':
-            G = ox.graph_from_place(f"{city_name}, {country_code}", 
-                                    network_type='drive',
-                                    custom_filter='["highway"~"primary|secondary|residential|motorway"]')
-        else:  # center mode
-            G = ox.graph_from_point(center_point, 
-                                    dist=500,
-                                    network_type='drive',
-                                    custom_filter='["highway"~"primary|secondary|residential|motorway"]')
+        try:
+            if mode == 'whole':
+                G = ox.graph_from_place(f"{city_name}, {country_code}", 
+                                        network_type='drive',
+                                        custom_filter='["highway"~"primary|secondary|residential|motorway"]')
+            else:  # center mode
+                G = ox.graph_from_point(center_point, 
+                                        dist=500,
+                                        network_type='drive',
+                                        custom_filter='["highway"~"primary|secondary|residential|motorway"]')
+        except ox.errors.TimeoutError:
+            print(f"Skipping {city_name}, {country_code} due to timeout.")
+            return None
         
         return process_graph(G, city_name, country_code, mode)
     except Exception as e:
