@@ -42,8 +42,8 @@ def load_and_process_matrices(data_dir, min_nodes, max_nodes):
     print(f"\nProcessing cities with size range: {min_nodes} - {max_nodes}")
     print("-" * 50)
 
-    adj_dir = os.path.join(data_dir, 'adj_matrices/center')
-    coord_dir = os.path.join(data_dir, 'coordinates/center/transformed')
+    adj_dir = os.path.join(data_dir, 'adj_matrices/world/center')
+    coord_dir = os.path.join(data_dir, 'coordinates/world/center/transformed')
 
     if not os.path.exists(adj_dir) or not os.path.exists(coord_dir):
         raise ValueError(f"Required directories not found in {data_dir}")
