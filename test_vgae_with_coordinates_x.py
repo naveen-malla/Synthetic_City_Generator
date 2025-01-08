@@ -54,7 +54,7 @@ def load_and_process_matrices(data_dir, min_nodes, max_nodes):
 
     try:
         adj_dir = os.path.join(data_dir, 'adj_matrices/world/center')
-        coord_dir = os.path.join(data_dir, 'coordinates/worldcenter/transformed')
+        coord_dir = os.path.join(data_dir, 'coordinates/world/center/transformed')
 
         if not os.path.exists(adj_dir) or not os.path.exists(coord_dir):
             raise ValueError(f"Required directories not found in {data_dir}")
@@ -204,7 +204,6 @@ def final_evaluation(model, matrices, features_list, processed_cities):
     print(tabulate(size_performance, headers='keys', tablefmt='pretty'))
 
     return df
-
 def main():
     min_nodes, max_nodes = 10, 100
     matrices, features_list, processed_cities = load_and_process_matrices('data', min_nodes, max_nodes)
@@ -232,12 +231,15 @@ def main():
             total_loss += loss.item()
         
         val_aucs = []
+        val_aps = []
         for (val_edge_index, val_adj), val_features in zip(val_data[0], val_data[1]):
             val_data_obj = Data(x=val_features, edge_index=val_edge_index).to(device)
-            val_auc, _ = evaluate(model, val_data_obj, val_adj)
+            val_auc, val_ap = evaluate(model, val_data_obj, val_adj)
             val_aucs.append(val_auc)
+            val_aps.append(val_ap)
         
         avg_val_auc = np.mean(val_aucs)
+        avg_val_ap = np.mean(val_aps)
         scheduler.step(avg_val_auc)
         
         if avg_val_auc > best_val_auc:
@@ -254,13 +256,12 @@ def main():
         
         if epoch % 10 == 0:
             print(f'Epoch: {epoch:03d}, Loss: {total_loss/len(train_data[0]):.4f}, '
-                  f'Val AUC: {avg_val_auc:.4f}')
+                  f'Val AUC: {avg_val_auc:.4f}, Val AP: {avg_val_ap:.4f}')
         
         if counter >= patience:
             print(f'Early stopping at epoch {epoch}')
             break
 
-    
     checkpoint = torch.load('best_vgae_model.pt')
     model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
