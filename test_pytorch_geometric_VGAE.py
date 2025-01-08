@@ -7,6 +7,9 @@ import numpy as np
 import os
 from sklearn.metrics import roc_auc_score, average_precision_score
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+import pandas as pd
+import matplotlib.pyplot as plt
+from tabulate import tabulate
 
 # Set random seed
 torch.manual_seed(42)
@@ -42,8 +45,8 @@ def load_and_process_matrices(data_dir, min_nodes, max_nodes):
     print(f"\nProcessing cities with size range: {min_nodes} - {max_nodes}")
     print("-" * 50)
 
-    adj_dir = os.path.join(data_dir, 'adj_matrices/world/center')
-    coord_dir = os.path.join(data_dir, 'coordinates/world/center/transformed')
+    adj_dir = os.path.join(data_dir, 'adj_matrices/center')
+    coord_dir = os.path.join(data_dir, 'coordinates/center/transformed')
 
     if not os.path.exists(adj_dir) or not os.path.exists(coord_dir):
         raise ValueError(f"Required directories not found in {data_dir}")
@@ -80,7 +83,7 @@ def load_and_process_matrices(data_dir, min_nodes, max_nodes):
             matrices.append((edge_index, adj_matrix))
             features_list.append(node_features)
             processed_cities.append(city)
-            print(f"Loaded {city}: Shape {adj_matrix.shape}")
+            #print(f"Loaded {city}: Shape {adj_matrix.shape}")
 
         except Exception as e:
             print(f"Error processing {city}: {str(e)}")
@@ -121,12 +124,109 @@ def train_epoch(model, optimizer, data):
 
     return total_loss.item()
 
+def split_dataset(matrices, features_list, processed_cities, train_ratio=0.7, val_ratio=0.15):
+    n = len(matrices)
+    indices = np.random.permutation(n)
+    
+    train_size = int(n * train_ratio)
+    val_size = int(n * val_ratio)
+    
+    train_indices = indices[:train_size]
+    val_indices = indices[train_size:train_size+val_size]
+    test_indices = indices[train_size+val_size:]
+    
+    def subset(data, idx):
+        return [data[i] for i in idx]
+        
+    return (subset(matrices, train_indices), subset(features_list, train_indices), subset(processed_cities, train_indices)), \
+           (subset(matrices, val_indices), subset(features_list, val_indices), subset(processed_cities, val_indices)), \
+           (subset(matrices, test_indices), subset(features_list, test_indices), subset(processed_cities, test_indices))
+
+def evaluate(model, data, adj_matrix):
+    model.eval()
+    data = data.to(device)
+    with torch.no_grad():
+        z = model.encode(data.x, data.edge_index)
+        pred_adj = torch.sigmoid(torch.matmul(z, z.t())).cpu().numpy()
+        binary_pred_adj = (pred_adj > 0.5).astype(float)
+        auc = roc_auc_score(adj_matrix.flatten(), pred_adj.flatten())
+        ap = average_precision_score(adj_matrix.flatten(), pred_adj.flatten())
+        accuracy = (binary_pred_adj == adj_matrix).mean()
+    return auc, ap, accuracy, binary_pred_adj
+
+def final_evaluation(model, matrices, features_list, processed_cities):
+    print("\nFinal Evaluation:")
+    results = []
+    predicted_adjs = {}
+    
+    for idx, ((edge_index, adj_matrix), features) in enumerate(zip(matrices, features_list)):
+        with torch.no_grad():
+            data = Data(x=features, edge_index=edge_index).to(device)
+            z = model.encode(data.x, data.edge_index)
+            pred_adj = torch.sigmoid(torch.matmul(z, z.t())).cpu().numpy()
+            binary_pred_adj = (pred_adj > 0.5).astype(float)
+            
+        auc = roc_auc_score(adj_matrix.flatten(), pred_adj.flatten())
+        ap = average_precision_score(adj_matrix.flatten(), pred_adj.flatten())
+        accuracy = (binary_pred_adj == adj_matrix).mean()
+        
+        results.append({
+            'City': processed_cities[idx],
+            'Nodes': adj_matrix.shape[0],
+            'AUC': auc,
+            'AP': ap,
+            'Accuracy': accuracy
+        })
+        predicted_adjs[processed_cities[idx]] = binary_pred_adj
+    
+    df = pd.DataFrame(results)
+    
+    print("\nSummary Statistics:")
+    print(df[['AUC', 'AP', 'Accuracy']].describe())
+    
+    print("\nTop 5 Cities by AUC:")
+    print(tabulate(df.nlargest(5, 'AUC')[['City', 'Nodes', 'AUC', 'AP', 'Accuracy']], 
+                  headers='keys', tablefmt='pretty'))
+    
+    print("\nBottom 5 Cities by AUC:")
+    print(tabulate(df.nsmallest(5, 'AUC')[['City', 'Nodes', 'AUC', 'AP', 'Accuracy']], 
+                  headers='keys', tablefmt='pretty'))
+    
+    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+    
+    axes[0].hist(df['AUC'], bins=20, edgecolor='black')
+    axes[0].set_title('Distribution of AUC Scores')
+    axes[0].set_xlabel('AUC')
+    axes[0].set_ylabel('Frequency')
+    
+    axes[1].hist(df['AP'], bins=20, edgecolor='black')
+    axes[1].set_title('Distribution of AP Scores')
+    axes[1].set_xlabel('AP')
+    
+    axes[2].hist(df['Accuracy'], bins=20, edgecolor='black')
+    axes[2].set_title('Distribution of Accuracy Scores')
+    axes[2].set_xlabel('Accuracy')
+    
+    plt.tight_layout()
+    plt.savefig('evaluation_metrics.png')
+    plt.close()
+    
+    df['Size'] = pd.cut(df['Nodes'], bins=[0, 60, 80, 100], labels=['Small', 'Medium', 'Large'])
+    size_performance = df.groupby('Size')[['AUC', 'AP', 'Accuracy']].mean()
+    
+    print("\nPerformance by City Size:")
+    print(tabulate(size_performance, headers='keys', tablefmt='pretty'))
+    
+    return df, predicted_adjs
+
 def main():
     min_nodes = 10
     max_nodes = 100
     matrices, features_list, processed_cities = load_and_process_matrices('data', min_nodes, max_nodes)
-    print(f"\nTraining on {len(processed_cities)} cities within size range {min_nodes}-{max_nodes}")
+    train_data, val_data, test_data = split_dataset(matrices, features_list, processed_cities)
+    print(f"\nTraining on {len(train_data[0])} cities within size range {min_nodes}-{max_nodes}")
 
+    # Initialize model
     model = VGAE(
         encoder=VariationalGCNEncoder(
             in_channels=2,  # Only x,y coordinates
@@ -144,56 +244,45 @@ def main():
 
     for epoch in range(1, 301):
         total_loss = 0
-
-        for idx, ((edge_index, adj_matrix), features) in enumerate(zip(matrices, features_list)):
-            data = Data(x=features.to(device), edge_index=edge_index.to(device))
+        # Train on batches
+        for (edge_index, adj_matrix), features in zip(*train_data[:2]):
+            data = Data(x=features, edge_index=edge_index)
             loss = train_epoch(model, optimizer, data)
             total_loss += loss
 
         # Validation
-        val_idx = np.random.randint(len(matrices))
-        val_edge_index, val_adj = matrices[val_idx]
-        val_features = features_list[val_idx]
+        val_aucs = []
+        val_aps = []
+        for (val_edge_index, val_adj), val_features in zip(val_data[0], val_data[1]):
+            val_data_obj = Data(x=val_features, edge_index=val_edge_index)
+            val_auc, val_ap, accuracy, binary_pred_adj = evaluate(model, val_data_obj, val_adj)
+            val_aucs.append(val_auc)
+            val_aps.append(val_ap)
 
-        model.eval()
-        with torch.no_grad():
-            z = model.encode(val_features.to(device), val_edge_index.to(device))
-            pred_adj = torch.sigmoid(torch.matmul(z, z.t())).cpu().numpy()
-            
-            # Calculate both metrics
-            auc = roc_auc_score(val_adj.flatten(), pred_adj.flatten())
-            ap = average_precision_score(val_adj.flatten(), pred_adj.flatten())
+        avg_val_auc = np.mean(val_aucs)
+        avg_val_ap = np.mean(val_aps)
+        
+        scheduler.step(avg_val_auc)
 
-        scheduler.step(auc)
-
-        if auc > best_val_auc:
-            best_val_auc = auc
+        if avg_val_auc > best_val_auc:
+            best_val_auc = avg_val_auc
             patience_counter = 0
             torch.save(model.state_dict(), "best_vgae_model.pt")
         else:
             patience_counter += 1
 
         if epoch % 10 == 0:
-            print(f'Epoch: {epoch:03d}, Loss: {total_loss/len(matrices):.4f}, Val AUC: {auc:.4f}, Val AP: {ap:.4f}')
+            print(f'Epoch: {epoch:03d}, Loss: {total_loss/len(train_data[0]):.4f}, '
+                  f'Val AUC: {avg_val_auc:.4f}, Val AP: {avg_val_ap:.4f}')
 
         if patience_counter >= 50:
             print(f'Early stopping at epoch {epoch}')
             break
 
-    # Final evaluation
-    print("\nFinal Evaluation on Each City:")
-    model.load_state_dict(torch.load("best_vgae_model.pt", map_location=device))
+    # Load best model and evaluate
+    model.load_state_dict(torch.load("best_vgae_model.pt"))
     model.eval()
-
-    for idx, ((edge_index, adj_matrix), features) in enumerate(zip(matrices, features_list)):
-        with torch.no_grad():
-            z = model.encode(features.to(device), edge_index.to(device))
-            pred_adj = torch.sigmoid(torch.matmul(z, z.t())).cpu().numpy()
-            
-            # Calculate both metrics for final evaluation
-            auc = roc_auc_score(adj_matrix.flatten(), pred_adj.flatten())
-            ap = average_precision_score(adj_matrix.flatten(), pred_adj.flatten())
-            print(f"{processed_cities[idx]} - Test AUC: {auc:.4f}, AP: {ap:.4f}")
+    results_df = final_evaluation(model, test_data[0], test_data[1], test_data[2])
 
 if __name__ == "__main__":
     main()
