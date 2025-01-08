@@ -58,7 +58,7 @@ def load_and_process_matrices(data_dir, min_nodes, max_nodes):
 
         if not os.path.exists(adj_dir) or not os.path.exists(coord_dir):
             raise ValueError(f"Required directories not found in {data_dir}")
-
+        
         cities = [f.split('_adj.npy')[0] for f in os.listdir(adj_dir) if f.endswith('_adj.npy')]
         print(f"Found {len(cities)} potential cities")
 
@@ -80,31 +80,31 @@ def load_and_process_matrices(data_dir, min_nodes, max_nodes):
                 adj_matrix = (adj_matrix > 0).astype(float)
                 structured_coords = np.load(coord_file)
                 coordinates = np.column_stack((structured_coords['y'], structured_coords['x'])).astype(np.float32)
-
+                
                 if coordinates.shape[0] != matrix_size:
                     print(f"Skipping {city}: Size mismatch - Adj: {matrix_size}, Coords: {coordinates.shape[0]}")
                     continue
-
+                
                 node_features = torch.FloatTensor(coordinates)
                 edge_index, _ = dense_to_sparse(torch.FloatTensor(adj_matrix))
                 matrices.append((edge_index, adj_matrix))
                 features_list.append(node_features)
                 processed_cities.append(city)
                 print(f"Loaded {city}: Shape {adj_matrix.shape}")
-
+            
             except Exception as e:
                 print(f"Error processing {city}: {str(e)}")
                 continue
-
+        
         print(f"\nSuccessfully loaded {len(matrices)} cities")
         print(f"Size range: {min_nodes}-{max_nodes} nodes")
-        #print(f"Processed cities: {', '.join(processed_cities)}")
+
 
         if len(matrices) == 0:
             raise ValueError(f"No valid cities found within size range {min_nodes}-{max_nodes}")
-
+        
         return matrices, features_list, processed_cities
-
+    
     except Exception as e:
         print(f"Fatal error in data loading: {str(e)}")
         raise
@@ -129,6 +129,8 @@ def split_dataset(matrices, features_list, processed_cities, train_ratio=0.7, va
 def train_epoch(model, optimizer, data, edge_index):
     model.train()
     optimizer.zero_grad()
+    data = data.to(model.device)
+    edge_index = edge_index.to(model.device)
     z = model.encode(data.x, edge_index)
     adj_orig = to_dense_adj(edge_index)[0]
     decoded = model.decoder(z, data.x)
@@ -136,7 +138,7 @@ def train_epoch(model, optimizer, data, edge_index):
     num_edges = edge_index.shape[1]
     num_nodes = data.x.size(0)
     num_possible_edges = num_nodes * (num_nodes - 1) // 2
-    pos_weight = torch.tensor((num_possible_edges - num_edges) / num_edges)
+    pos_weight = torch.tensor((num_possible_edges - num_edges) / num_edges).to(model.device)
     loss = F.binary_cross_entropy_with_logits(adj_pred.view(-1), adj_orig.view(-1), pos_weight=pos_weight)
     kl_loss = (0.05 / data.x.size(0)) * model.kl_loss()
     total_loss = loss + kl_loss
@@ -147,11 +149,12 @@ def train_epoch(model, optimizer, data, edge_index):
 
 def evaluate(model, data, adj_matrix):
     model.eval()
+    data = data.to(model.device)
     with torch.no_grad():
         z = model.encode(data.x, data.edge_index)
         pred_adj = torch.sigmoid(torch.matmul(z, z.t())).cpu().numpy()
-        auc = roc_auc_score(adj_matrix.flatten(), pred_adj.flatten())
-        ap = average_precision_score(adj_matrix.flatten(), pred_adj.flatten())
+    auc = roc_auc_score(adj_matrix.flatten(), pred_adj.flatten())
+    ap = average_precision_score(adj_matrix.flatten(), pred_adj.flatten())
     return auc, ap
 
 def final_evaluation(model, matrices, features_list, processed_cities):
@@ -160,16 +163,17 @@ def final_evaluation(model, matrices, features_list, processed_cities):
     
     for idx, ((edge_index, adj_matrix), features) in enumerate(zip(matrices, features_list)):
         with torch.no_grad():
-            z = model.encode(features, edge_index)
+            data = Data(x=features, edge_index=edge_index).to(model.device)
+            z = model.encode(data.x, data.edge_index)
             pred_adj = torch.sigmoid(torch.matmul(z, z.t())).cpu().numpy()
-            auc = roc_auc_score(adj_matrix.flatten(), pred_adj.flatten())
-            ap = average_precision_score(adj_matrix.flatten(), pred_adj.flatten())
-            results.append({
-                'City': processed_cities[idx],
-                'Nodes': adj_matrix.shape[0],
-                'AUC': auc,
-                'AP': ap
-            })
+        auc = roc_auc_score(adj_matrix.flatten(), pred_adj.flatten())
+        ap = average_precision_score(adj_matrix.flatten(), pred_adj.flatten())
+        results.append({
+            'City': processed_cities[idx],
+            'Nodes': adj_matrix.shape[0],
+            'AUC': auc,
+            'AP': ap
+        })
     
     df = pd.DataFrame(results)
     
@@ -181,7 +185,7 @@ def final_evaluation(model, matrices, features_list, processed_cities):
     
     print("\nBottom 5 Cities by AUC:")
     print(tabulate(df.nsmallest(5, 'AUC')[['City', 'Nodes', 'AUC', 'AP']], headers='keys', tablefmt='pretty'))
-    
+   
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
     ax1.hist(df['AUC'], bins=20, edgecolor='black')
     ax1.set_title('Distribution of AUC Scores')
@@ -192,7 +196,7 @@ def final_evaluation(model, matrices, features_list, processed_cities):
     ax2.set_title('Distribution of AP Scores')
     ax2.set_xlabel('AP')
     ax2.set_ylabel('Frequency')
-    
+   
     plt.tight_layout()
     plt.savefig('score_distributions.png')
     plt.close()
@@ -202,8 +206,9 @@ def final_evaluation(model, matrices, features_list, processed_cities):
     
     print("\nPerformance by City Size:")
     print(tabulate(size_performance, headers='keys', tablefmt='pretty'))
-
+    
     return df
+
 def main():
     min_nodes, max_nodes = 10, 100
     matrices, features_list, processed_cities = load_and_process_matrices('data', min_nodes, max_nodes)
@@ -219,7 +224,7 @@ def main():
     
     optimizer = torch.optim.AdamW(model.parameters(), lr=0.0003, weight_decay=1e-5)
     scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.7, patience=10)
-    
+   
     best_val_auc = 0
     patience, counter = 50, 0
     
@@ -229,7 +234,7 @@ def main():
             data = Data(x=features, edge_index=edge_index).to(device)
             loss = train_epoch(model, optimizer, data, edge_index)
             total_loss += loss.item()
-        
+    
         val_aucs = []
         val_aps = []
         for (val_edge_index, val_adj), val_features in zip(val_data[0], val_data[1]):
@@ -237,11 +242,11 @@ def main():
             val_auc, val_ap = evaluate(model, val_data_obj, val_adj)
             val_aucs.append(val_auc)
             val_aps.append(val_ap)
-        
+     
         avg_val_auc = np.mean(val_aucs)
         avg_val_ap = np.mean(val_aps)
         scheduler.step(avg_val_auc)
-        
+     
         if avg_val_auc > best_val_auc:
             best_val_auc = avg_val_auc
             counter = 0
@@ -253,15 +258,15 @@ def main():
             }, 'best_vgae_model.pt')
         else:
             counter += 1
-        
+     
         if epoch % 10 == 0:
             print(f'Epoch: {epoch:03d}, Loss: {total_loss/len(train_data[0]):.4f}, '
                   f'Val AUC: {avg_val_auc:.4f}, Val AP: {avg_val_ap:.4f}')
-        
+      
         if counter >= patience:
             print(f'Early stopping at epoch {epoch}')
             break
-
+    
     checkpoint = torch.load('best_vgae_model.pt')
     model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
