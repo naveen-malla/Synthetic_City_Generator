@@ -2,12 +2,8 @@ import osmnx as ox
 import networkx as nx
 import numpy as np
 from pathlib import Path
-import os
+import requests
 
-# Set a global timeout (e.g., 5 minutes)
-ox.config(requests_timeout=300)
-
-# Update data directories
 data_dirs = {
     'coordinates': {
         'world': {
@@ -29,7 +25,6 @@ data_dirs = {
     }
 }
 
-# Create all directories
 for category in data_dirs.values():
     for region in category.values():
         if isinstance(region, dict):
@@ -42,8 +37,6 @@ for category in data_dirs.values():
         else:
             region.mkdir(parents=True, exist_ok=True)
 
-
-# Existing helper functions remain the same
 def normalize_coordinates(nodes):
     min_lat, max_lat = nodes['y'].min(), nodes['y'].max()
     min_lon, max_lon = nodes['x'].min(), nodes['x'].max()
@@ -55,7 +48,6 @@ def quantize_coordinates(nodes):
     nodes['y_quant'] = np.round(nodes['y_norm'] * 255).astype(int)
     nodes['x_quant'] = np.round(nodes['x_norm'] * 255).astype(int)
     return nodes
-
 
 def process_city(city_name, country_code, mode):
     print(f"Processing {city_name}, {country_code}...")
@@ -78,21 +70,27 @@ def process_city(city_name, country_code, mode):
             if mode == 'whole':
                 G = ox.graph_from_place(f"{city_name}, {country_code}", 
                                         network_type='drive',
-                                        custom_filter='["highway"~"primary|secondary|residential|motorway"]')
+                                        custom_filter='["highway"~"primary|secondary|residential|motorway"]',
+                                        timeout=300)
             else:  # center mode
                 G = ox.graph_from_point(center_point, 
                                         dist=500,
                                         network_type='drive',
-                                        custom_filter='["highway"~"primary|secondary|residential|motorway"]')
-        except ox.errors.TimeoutError:
+                                        custom_filter='["highway"~"primary|secondary|residential|motorway"]',
+                                        timeout=300)
+            
+            # Skip if the graph is too large (e.g., more than 10000 nodes)
+            if len(G.nodes) > 10000:
+                print(f"Skipping {city_name}, {country_code} due to large size ({len(G.nodes)} nodes).")
+                return None
+            
+            return process_graph(G, city_name, country_code, mode)
+        except requests.exceptions.Timeout:
             print(f"Skipping {city_name}, {country_code} due to timeout.")
             return None
-        
-        return process_graph(G, city_name, country_code, mode)
     except Exception as e:
         print(f"Error processing {city_name}, {country_code}: {e}")
         return None
-
 
 def process_graph(G, city_name, country_code, mode):
     G.remove_edges_from(nx.selfloop_edges(G))
@@ -116,6 +114,7 @@ def process_graph(G, city_name, country_code, mode):
     
     print(f"Saved coordinates for {city_name}, {country_code} ({mode})")
     print(f"Number of nodes: {len(original_coords)}")
+    return original_coords, transformed_coords
 
 def main():
     cities_folder = Path('cities')
@@ -135,7 +134,6 @@ def main():
         
         for city in cities:
             process_city(city, country_code, mode)
-
 
 if __name__ == "__main__":
     main()
