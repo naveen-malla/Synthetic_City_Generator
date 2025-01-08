@@ -1,13 +1,9 @@
 import osmnx as ox
 import networkx as nx
-import os
 import numpy as np
 from pathlib import Path
+import requests
 
-# Set a global timeout (e.g., 5 minutes)
-ox.config(timeout=300)
-
-# Update data directories
 data_dirs = {
     'adj_matrices': {
         'world': {
@@ -17,7 +13,6 @@ data_dirs = {
     }
 }
 
-# Create all directories
 for category in data_dirs.values():
     for region in category.values():
         for mode in region.values():
@@ -43,31 +38,37 @@ def process_city(city_name, country_code, mode):
             if mode == 'whole':
                 G = ox.graph_from_place(f"{city_name}, {country_code}", 
                                         network_type='drive',
-                                        custom_filter='["highway"~"primary|secondary|residential|motorway"]')
+                                        custom_filter='["highway"~"primary|secondary|residential|motorway"]',
+                                        timeout=300)
             else:  # center mode
                 G = ox.graph_from_point(center_point, 
                                         dist=500,
                                         network_type='drive',
-                                        custom_filter='["highway"~"primary|secondary|residential|motorway"]')
-        except ox.errors.TimeoutError:
+                                        custom_filter='["highway"~"primary|secondary|residential|motorway"]',
+                                        timeout=300)
+            
+            # Skip if the graph is too large (e.g., more than 10000 nodes)
+            if len(G.nodes) > 10000:
+                print(f"Skipping {city_name}, {country_code} due to large size ({len(G.nodes)} nodes).")
+                return None
+            
+            return process_graph(G, city_name, country_code, mode)
+        except requests.exceptions.Timeout:
             print(f"Skipping {city_name}, {country_code} due to timeout.")
             return None
-        
-        # Convert to undirected graph
-        G = G.to_undirected()
-        return process_graph(G, city_name, country_code, mode)
     except Exception as e:
         print(f"Error processing {city_name}, {country_code}: {e}")
         return None
 
-
 def process_graph(G, city_name, country_code, mode):
+    # Convert to undirected graph
+    G = G.to_undirected()
+    
     # Create adjacency matrix
     adj_matrix = nx.adjacency_matrix(G)
     dense_matrix = adj_matrix.todense()
     
-    # Save matrix
-    clean_name = f"{city_name.split('/')[0].strip().lower().replace(' ', '_')}_{country_code}"
+    clean_name = f"{city_name.lower().replace(' ', '_')}_{country_code}"
     np.save(data_dirs['adj_matrices']['world'][mode] / f"{clean_name}_adj.npy", dense_matrix)
     
     print(f"Saved adjacency matrix for {city_name}, {country_code} ({mode})")
