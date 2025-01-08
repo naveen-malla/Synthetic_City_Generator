@@ -5,7 +5,7 @@ from pathlib import Path
 import os
 
 # Set a global timeout (e.g., 5 minutes)
-ox.config(timeout=300)
+ox.config(requests_timeout=300)
 
 # Update data directories
 data_dirs = {
