@@ -4,6 +4,9 @@ import os
 import numpy as np
 from pathlib import Path
 
+# Set a global timeout (e.g., 5 minutes)
+ox.config(timeout=300)
+
 # Update data directories
 data_dirs = {
     'adj_matrices': {
@@ -36,15 +39,19 @@ def process_city(city_name, country_code, mode):
             print(f"Could not geocode {city_name}, {country_code}")
             return None
         
-        if mode == 'whole':
-            G = ox.graph_from_place(f"{city_name}, {country_code}", 
-                                    network_type='drive',
-                                    custom_filter='["highway"~"primary|secondary|residential|motorway"]')
-        else:  # center mode
-            G = ox.graph_from_point(center_point, 
-                                    dist=500,
-                                    network_type='drive',
-                                    custom_filter='["highway"~"primary|secondary|residential|motorway"]')
+        try:
+            if mode == 'whole':
+                G = ox.graph_from_place(f"{city_name}, {country_code}", 
+                                        network_type='drive',
+                                        custom_filter='["highway"~"primary|secondary|residential|motorway"]')
+            else:  # center mode
+                G = ox.graph_from_point(center_point, 
+                                        dist=500,
+                                        network_type='drive',
+                                        custom_filter='["highway"~"primary|secondary|residential|motorway"]')
+        except ox.errors.TimeoutError:
+            print(f"Skipping {city_name}, {country_code} due to timeout.")
+            return None
         
         # Convert to undirected graph
         G = G.to_undirected()
@@ -52,6 +59,7 @@ def process_city(city_name, country_code, mode):
     except Exception as e:
         print(f"Error processing {city_name}, {country_code}: {e}")
         return None
+
 
 def process_graph(G, city_name, country_code, mode):
     # Create adjacency matrix
