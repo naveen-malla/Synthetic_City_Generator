@@ -1,10 +1,10 @@
 import os
 import torch
 from datasets import Dataset
-from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments
+from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments, BitsAndBytesConfig
 from peft import LoraConfig
 from trl import SFTTrainer
-from torch.nn import MSELoss
+
 
 # Define base directory
 BASE_DIR = os.path.join('transformer', 'llama2')
@@ -19,17 +19,33 @@ for directory in [MODEL_DIR, CODE_DIR, RESULTS_DIR]:
     os.makedirs(directory, exist_ok=True)
 
 def load_model_and_tokenizer(model_name, device_map):
+    use_4bit = True
+    bnb_4bit_compute_dtype = "float16"
+    bnb_4bit_quant_type = "nf4"
+    use_nested_quant = False
+
+    compute_dtype = getattr(torch, bnb_4bit_compute_dtype)
+    bnb_config = BitsAndBytesConfig(
+        load_in_4bit=use_4bit,
+        bnb_4bit_quant_type=bnb_4bit_quant_type,
+        bnb_4bit_compute_dtype=compute_dtype,
+        bnb_4bit_use_double_quant=use_nested_quant,
+    )
+
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
+        quantization_config=bnb_config,
         device_map=device_map,
         cache_dir=MODEL_DIR,
         use_auth_token=True
     )
+
     model.config.use_cache = False
     model.config.pretraining_tp = 1
-    
+
     tokenizer = AutoTokenizer.from_pretrained(model_name, use_auth_token=True)
     return model, tokenizer
+
 
 def create_peft_config(lora_alpha, lora_dropout, lora_r):
     return LoraConfig(
@@ -62,14 +78,9 @@ def create_training_arguments(output_dir, num_train_epochs, per_device_train_bat
         report_to="tensorboard"
     )
 
-class CustomTrainer(SFTTrainer):
-    def compute_loss(self, model, inputs, return_outputs=False):
-        outputs = model(**inputs)
-        loss = MSELoss()(outputs.logits.view(-1), inputs['labels'].view(-1))
-        return (loss, outputs) if return_outputs else loss
 
 def train_model(model, tokenizer, dataset, peft_config, training_arguments, max_seq_length):
-    trainer = CustomTrainer(
+    trainer = SFTTrainer(
         model=model,
         train_dataset=dataset,
         peft_config=peft_config,
