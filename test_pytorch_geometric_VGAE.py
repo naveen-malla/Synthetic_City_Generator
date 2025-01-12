@@ -10,12 +10,20 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 import pandas as pd
 import matplotlib.pyplot as plt
 from tabulate import tabulate
-
+import time 
 # Set random seed
 torch.manual_seed(42)
 
+
 # Device selection
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+if torch.cuda.is_available():
+    device = torch.device('cuda')
+# elif torch.backends.mps.is_available():
+#     device = torch.device('mps')
+else:
+    device = torch.device('cpu')
+
+
 print(f"Using device: {device}")
 
 class VariationalGCNEncoder(torch.nn.Module):
@@ -108,8 +116,8 @@ def load_and_process_matrices(data_dir, min_nodes, max_nodes):
     print(f"\nProcessing cities with size range: {min_nodes} - {max_nodes}")
     print("-" * 50)
 
-    adj_dir = os.path.join(data_dir, 'adj_matrices/center')
-    coord_dir = os.path.join(data_dir, 'coordinates/center/transformed')
+    adj_dir = os.path.join(data_dir, 'adj_matrices/world/center')
+    coord_dir = os.path.join(data_dir, 'coordinates/world/center/transformed')
 
     if not os.path.exists(adj_dir) or not os.path.exists(coord_dir):
         raise ValueError(f"Required directories not found in {data_dir}")
@@ -122,7 +130,6 @@ def load_and_process_matrices(data_dir, min_nodes, max_nodes):
         coord_file = os.path.join(coord_dir, f'{city}_coords.npy')
 
         if not os.path.exists(adj_file) or not os.path.exists(coord_file):
-            print(f"Skipping {city}: Missing required files")
             continue
 
         try:
@@ -137,7 +144,6 @@ def load_and_process_matrices(data_dir, min_nodes, max_nodes):
             coordinates = np.column_stack((structured_coords['y'], structured_coords['x'])).astype(np.float32)
 
             if coordinates.shape[0] != matrix_size:
-                print(f"Skipping {city}: Size mismatch - Adj: {matrix_size}, Coords: {coordinates.shape[0]}")
                 continue
 
             node_features = create_node_features(coordinates)
@@ -210,7 +216,7 @@ def evaluate(model, data, adj_matrix):
     data = data.to(device)
     with torch.no_grad():
         z = model.encode(data.x, data.edge_index)
-        pred_adj = torch.sigmoid(torch.matmul(z, z.t())).cpu().numpy()
+        pred_adj = torch.sigmoid(torch.matmul(z, z.t())).detach().to('cpu').numpy()
         binary_pred_adj = (pred_adj > 0.5).astype(float)
         auc = roc_auc_score(adj_matrix.flatten(), pred_adj.flatten())
         ap = average_precision_score(adj_matrix.flatten(), pred_adj.flatten())
@@ -226,7 +232,7 @@ def final_evaluation(model, matrices, features_list, processed_cities):
         with torch.no_grad():
             data = Data(x=features, edge_index=edge_index).to(device)
             z = model.encode(data.x, data.edge_index)
-            pred_adj = torch.sigmoid(torch.matmul(z, z.t())).cpu().numpy()
+            pred_adj = torch.sigmoid(torch.matmul(z, z.t())).detach().to('cpu').numpy()
             binary_pred_adj = (pred_adj > 0.5).astype(float)
             
         auc = roc_auc_score(adj_matrix.flatten(), pred_adj.flatten())
@@ -282,9 +288,67 @@ def final_evaluation(model, matrices, features_list, processed_cities):
     
     return df, predicted_adjs
 
+def train_model(model, train_data, val_data, optimizer, scheduler, num_epochs=1000):
+    best_val_auc = 0
+    patience_counter = 0
+    min_delta = 1e-4
+    
+    for epoch in range(1, num_epochs + 1):
+        model.train()
+        total_loss = 0
+        
+        # Training
+        for (edge_index, adj_matrix), features in zip(*train_data[:2]):
+            data = Data(x=features, edge_index=edge_index).to(device)
+            loss = train_epoch(model, optimizer, data)
+            total_loss += loss
+        
+        # Validation
+        model.eval()
+        val_aucs = []
+        val_aps = []
+        with torch.no_grad():
+            for (val_edge_index, val_adj), val_features in zip(val_data[0], val_data[1]):
+                val_data_obj = Data(x=val_features, edge_index=val_edge_index).to(device)
+                val_auc, val_ap, accuracy, _ = evaluate(model, val_data_obj, val_adj)
+                val_aucs.append(val_auc)
+                val_aps.append(val_ap)
+        
+        avg_val_auc = np.mean(val_aucs)
+        avg_val_ap = np.mean(val_aps)
+        
+        # Learning rate scheduling
+        scheduler.step(avg_val_auc)
+        
+        # Early stopping with minimum improvement threshold
+        if avg_val_auc > (best_val_auc + min_delta):
+            best_val_auc = avg_val_auc
+            patience_counter = 0
+            torch.save(model.state_dict(), "best_vgae_model_100_500_world.pt")
+        else:
+            patience_counter += 1
+            
+        if patience_counter >= 100:
+            print(f'Early stopping at epoch {epoch}')
+            break
+            
+        # Print progress
+        if epoch <= 100:
+            if epoch % 10 == 0:
+                print(f'Epoch: {epoch:03d}, Loss: {total_loss/len(train_data[0]):.4f}, '
+                      f'Val AUC: {avg_val_auc:.4f}, Val AP: {avg_val_ap:.4f}')
+        else:
+            if epoch % 50 == 0:
+                print(f'Epoch: {epoch:03d}, Loss: {total_loss/len(train_data[0]):.4f}, '
+                      f'Val AUC: {avg_val_auc:.4f}, Val AP: {avg_val_ap:.4f}')
+    
+    # Load best model
+    model.load_state_dict(torch.load("best_vgae_model_100_500_world.pt"))
+    return model
+
 def main():
-    min_nodes = 10
-    max_nodes = 100
+    min_nodes = 100
+    max_nodes = 500
     matrices, features_list, processed_cities = load_and_process_matrices('data', min_nodes, max_nodes)
     train_data, val_data, test_data = split_dataset(matrices, features_list, processed_cities)
     print(f"\nTraining on {len(train_data[0])} cities within size range {min_nodes}-{max_nodes}")
@@ -302,48 +366,9 @@ def main():
     optimizer = torch.optim.AdamW(model.parameters(), lr=0.0003, weight_decay=1e-5)
     scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.7, patience=10)
 
-    best_val_auc = 0
-    patience_counter = 0
-
-    for epoch in range(1, 1001):
-        total_loss = 0
-        # Train on batches
-        for (edge_index, adj_matrix), features in zip(*train_data[:2]):
-            data = Data(x=features, edge_index=edge_index)
-            loss = train_epoch(model, optimizer, data)
-            total_loss += loss
-
-        # Validation
-        val_aucs = []
-        val_aps = []
-        for (val_edge_index, val_adj), val_features in zip(val_data[0], val_data[1]):
-            val_data_obj = Data(x=val_features, edge_index=val_edge_index)
-            val_auc, val_ap, accuracy, binary_pred_adj = evaluate(model, val_data_obj, val_adj)
-            val_aucs.append(val_auc)
-            val_aps.append(val_ap)
-
-        avg_val_auc = np.mean(val_aucs)
-        avg_val_ap = np.mean(val_aps)
-        
-        scheduler.step(avg_val_auc)
-
-        if avg_val_auc > best_val_auc:
-            best_val_auc = avg_val_auc
-            patience_counter = 0
-            torch.save(model.state_dict(), "best_vgae_model.pt")
-        else:
-            patience_counter += 1
-
-        if epoch % 10 == 0:
-            print(f'Epoch: {epoch:03d}, Loss: {total_loss/len(train_data[0]):.4f}, '
-                  f'Val AUC: {avg_val_auc:.4f}, Val AP: {avg_val_ap:.4f}')
-
-        if patience_counter >= 50:
-            print(f'Early stopping at epoch {epoch}')
-            break
+    model = train_model(model, train_data, val_data, optimizer, scheduler, num_epochs=1000)
 
     # Load best model and evaluate
-    model.load_state_dict(torch.load("best_vgae_model.pt"))
     model.eval()
     results_df = final_evaluation(model, test_data[0], test_data[1], test_data[2])
 
