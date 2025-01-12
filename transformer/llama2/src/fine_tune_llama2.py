@@ -37,13 +37,13 @@ def load_model_and_tokenizer(model_name, device_map):
         quantization_config=bnb_config,
         device_map=device_map,
         cache_dir=MODEL_DIR,
-        use_auth_token=True
+        token=True
     )
 
     model.config.use_cache = False
     model.config.pretraining_tp = 1
 
-    tokenizer = AutoTokenizer.from_pretrained(model_name, use_auth_token=True)
+    tokenizer = AutoTokenizer.from_pretrained(model_name, token=True)
     return model, tokenizer
 
 
@@ -58,7 +58,7 @@ def create_peft_config(lora_alpha, lora_dropout, lora_r):
 
 def create_training_arguments(output_dir, num_train_epochs, per_device_train_batch_size,
                               gradient_accumulation_steps, learning_rate, weight_decay,
-                              max_grad_norm, warmup_ratio):
+                              max_grad_norm, warmup_ratio, max_seq_length):
     return TrainingArguments(
         output_dir=output_dir,
         num_train_epochs=num_train_epochs,
@@ -75,11 +75,12 @@ def create_training_arguments(output_dir, num_train_epochs, per_device_train_bat
         warmup_ratio=warmup_ratio,
         group_by_length=True,
         lr_scheduler_type="cosine",
-        report_to="tensorboard"
+        report_to="tensorboard",
+        max_seq_length=max_seq_length
     )
 
 
-def train_model(model, tokenizer, dataset, peft_config, training_arguments, max_seq_length):
+def train_model(model, tokenizer, dataset, peft_config, training_arguments):
     def formatting_func(example):
         return f"Input: {example['input']}\nOutput: {example['output']}"
 
@@ -87,9 +88,9 @@ def train_model(model, tokenizer, dataset, peft_config, training_arguments, max_
         model=model,
         train_dataset=dataset,
         peft_config=peft_config,
-        max_seq_length=max_seq_length,
         tokenizer=tokenizer,
         args=training_arguments,
+        processing_class=tokenizer,
         formatting_func=formatting_func,
     )
     
@@ -126,6 +127,7 @@ def main():
     weight_decay = 0.001
     max_grad_norm = 0.3
     warmup_ratio = 0.03
+    max_seq_length=512
 
     # Load your coordinate dataset
     coordinate_data = [
@@ -148,11 +150,11 @@ def main():
     training_arguments = create_training_arguments(
         output_dir, num_train_epochs, per_device_train_batch_size,
         gradient_accumulation_steps, learning_rate, weight_decay,
-        max_grad_norm, warmup_ratio
+        max_grad_norm, warmup_ratio, max_seq_length
     )
 
     # Train model
-    trainer = train_model(model, tokenizer, dataset, peft_config, training_arguments, None)
+    trainer = train_model(model, tokenizer, dataset, peft_config, training_arguments)
 
     # Save model
     save_model(trainer, new_model)
