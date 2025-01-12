@@ -23,8 +23,8 @@ def load_model_and_tokenizer(model_name, device_map):
     bnb_4bit_compute_dtype = "float16"
     bnb_4bit_quant_type = "nf4"
     use_nested_quant = False
-
     compute_dtype = getattr(torch, bnb_4bit_compute_dtype)
+
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=use_4bit,
         bnb_4bit_quant_type=bnb_4bit_quant_type,
@@ -80,18 +80,22 @@ def create_training_arguments(output_dir, num_train_epochs, per_device_train_bat
 
 
 def train_model(model, tokenizer, dataset, peft_config, training_arguments, max_seq_length):
+    def formatting_func(example):
+        return f"Input: {example['input']}\nOutput: {example['output']}"
+
     trainer = SFTTrainer(
         model=model,
         train_dataset=dataset,
         peft_config=peft_config,
-        dataset_text_field="coordinates",
         max_seq_length=max_seq_length,
         tokenizer=tokenizer,
         args=training_arguments,
-        packing=False,
+        formatting_func=formatting_func,
     )
+    
     trainer.train()
     return trainer
+
 
 def save_model(trainer, new_model):
     save_path = os.path.join(MODEL_DIR, new_model)
