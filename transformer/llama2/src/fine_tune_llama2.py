@@ -87,12 +87,11 @@ def train_model(model, tokenizer, dataset, peft_config, training_arguments):
         model=model,
         train_dataset=dataset,
         peft_config=peft_config,
-        tokenizer=tokenizer,
+        processing_class=tokenizer, 
         args=training_arguments,
-        processing_class=tokenizer,
         formatting_func=formatting_func,
     )
-    
+
     trainer.train()
     return trainer
 
