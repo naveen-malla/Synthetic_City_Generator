@@ -18,16 +18,6 @@ RESULTS_DIR = os.path.join(BASE_DIR, 'results')
 for directory in [MODEL_DIR, CODE_DIR, RESULTS_DIR]:
     os.makedirs(directory, exist_ok=True)
 
-class CoordinateTokenizer:
-    def __init__(self, vocab_size):
-        self.vocab_size = vocab_size
-
-    def encode(self, coordinates):
-        return [int(coord) % self.vocab_size for coord in coordinates]
-
-    def decode(self, tokens):
-        return tokens
-
 def load_model_and_tokenizer(model_name, device_map):
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
