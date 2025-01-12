@@ -58,7 +58,7 @@ def create_peft_config(lora_alpha, lora_dropout, lora_r):
 
 def create_training_arguments(output_dir, num_train_epochs, per_device_train_batch_size,
                               gradient_accumulation_steps, learning_rate, weight_decay,
-                              max_grad_norm, warmup_ratio, max_seq_length):
+                              max_grad_norm, warmup_ratio):
     return TrainingArguments(
         output_dir=output_dir,
         num_train_epochs=num_train_epochs,
@@ -76,7 +76,6 @@ def create_training_arguments(output_dir, num_train_epochs, per_device_train_bat
         group_by_length=True,
         lr_scheduler_type="cosine",
         report_to="tensorboard",
-        max_seq_length=max_seq_length
     )
 
 
@@ -150,7 +149,7 @@ def main():
     training_arguments = create_training_arguments(
         output_dir, num_train_epochs, per_device_train_batch_size,
         gradient_accumulation_steps, learning_rate, weight_decay,
-        max_grad_norm, warmup_ratio, max_seq_length
+        max_grad_norm, warmup_ratio
     )
 
     # Train model
