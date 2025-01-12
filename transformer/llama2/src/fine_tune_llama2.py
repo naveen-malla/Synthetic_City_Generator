@@ -32,12 +32,13 @@ def load_model_and_tokenizer(model_name, device_map):
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
         device_map=device_map,
-        cache_dir=MODEL_DIR
+        cache_dir=MODEL_DIR,
+        use_auth_token=True
     )
     model.config.use_cache = False
     model.config.pretraining_tp = 1
     
-    tokenizer = CoordinateTokenizer(vocab_size=256)
+    tokenizer = AutoTokenizer.from_pretrained(model_name, use_auth_token=True)
     return model, tokenizer
 
 def create_peft_config(lora_alpha, lora_dropout, lora_r):
@@ -103,7 +104,7 @@ def generate_coordinates(model, tokenizer, input_coords):
 
 def main():
     # Configuration
-    model_name = "NousResearch/Llama-2-7b-hf"
+    model_name = "meta-llama/Llama-2-7b-hf"
     new_model = "Llama-2-7b-coordinate-predictor"
     output_dir = RESULTS_DIR
 
