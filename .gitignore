@@ -175,3 +175,5 @@ transformer/llama2/models
 results
 
 *.png
+
+.vscode
