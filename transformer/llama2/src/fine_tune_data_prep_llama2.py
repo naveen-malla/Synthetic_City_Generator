@@ -7,7 +7,7 @@ from tqdm import tqdm
 COORD_FOLDER = 'data/coordinates/germany/center/transformed/train'
 ADJ_FOLDER = 'data/adj_matrices/germany/center/train'
 OUTPUT_FOLDER = 'transformer/llama2/dataset'
-OUTPUT_FILE = 'train_10_50_nodes.json'
+OUTPUT_FILE = 'train_10_50_nodes_germany_center.json'
 MIN_NODES = 10
 MAX_NODES = 50
 
