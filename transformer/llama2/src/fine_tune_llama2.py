@@ -1,4 +1,5 @@
 import os
+import json
 import torch
 from datasets import Dataset
 from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments, BitsAndBytesConfig
@@ -10,9 +11,10 @@ BASE_DIR = os.path.join('transformer', 'llama2')
 MODEL_DIR = os.path.join(BASE_DIR, 'models')
 CODE_DIR = os.path.join(BASE_DIR, 'src')
 RESULTS_DIR = os.path.join(BASE_DIR, 'results')
+DATASET_DIR = os.path.join(BASE_DIR, 'dataset')
 
 # Create directories if they don't exist
-for directory in [MODEL_DIR, CODE_DIR, RESULTS_DIR]:
+for directory in [MODEL_DIR, CODE_DIR, RESULTS_DIR, DATASET_DIR]:
     os.makedirs(directory, exist_ok=True)
 
 def load_model_and_tokenizer(model_name, device_map):
@@ -64,16 +66,16 @@ def create_peft_config(lora_alpha, lora_dropout, lora_r):
     )
 
 def create_training_arguments(output_dir, num_train_epochs, per_device_train_batch_size,
-                            gradient_accumulation_steps, learning_rate, weight_decay,
-                            max_grad_norm, warmup_ratio):
+                              gradient_accumulation_steps, learning_rate, weight_decay,
+                              max_grad_norm, warmup_ratio):
     return TrainingArguments(
         output_dir=output_dir,
         num_train_epochs=num_train_epochs,
         per_device_train_batch_size=per_device_train_batch_size,
         gradient_accumulation_steps=gradient_accumulation_steps,
         optim="adamw_torch",
-        save_steps=0,
-        logging_steps=25,
+        save_steps=1000,
+        logging_steps=100,
         learning_rate=learning_rate,
         weight_decay=weight_decay,
         fp16=True,
@@ -81,8 +83,9 @@ def create_training_arguments(output_dir, num_train_epochs, per_device_train_bat
         max_steps=-1,
         warmup_ratio=warmup_ratio,
         group_by_length=True,
-        lr_scheduler_type="cosine"
+        lr_scheduler_type="cosine",
     )
+
 
 def train_model(model, tokenizer, dataset, peft_config, training_arguments):
     def formatting_func(example):
@@ -110,6 +113,11 @@ def generate_coordinates(model, tokenizer, input_coords, device):
     output = model.generate(input_tokens, max_length=200, num_return_sequences=1)
     return tokenizer.decode(output[0], skip_special_tokens=True)
 
+def load_dataset(file_path):
+    with open(file_path, 'r') as f:
+        data = json.load(f)
+    return Dataset.from_list(data)
+
 def main():
     # Configuration
     model_name = "meta-llama/Llama-2-7b-hf"
@@ -122,25 +130,18 @@ def main():
     lora_dropout = 0.1
 
     # Training configuration
-    num_train_epochs = 1
-    per_device_train_batch_size = 4
+    num_train_epochs = 3
+    per_device_train_batch_size = 8
     gradient_accumulation_steps = 1
-    learning_rate = 2e-4
-    weight_decay = 0.001
-    max_grad_norm = 0.3
-    warmup_ratio = 0.03
-    max_seq_length = 512
+    learning_rate = 5e-5
+    weight_decay = 0.01
+    max_grad_norm = 1.0
+    warmup_ratio = 0.1
+    max_seq_length = 1024
 
-    # Load your coordinate dataset
-    coordinate_data = [
-        {"input": [80, 123, 81, 122, 81, 124, 89, 100, 93, 120], "output": [85, 110, 87, 115, 90, 118, 92, 119, 94, 121]},
-        {"input": [70, 113, 71, 112, 72, 114, 79, 90, 83, 110], "output": [75, 100, 77, 105, 80, 108, 82, 109, 84, 111]},
-        {"input": [60, 103, 61, 102, 62, 104, 69, 80, 73, 100], "output": [65, 90, 67, 95, 70, 98, 72, 99, 74, 101]},
-        {"input": [50, 93, 51, 92, 52, 94, 59, 70, 63, 90], "output": [55, 80, 57, 85, 60, 88, 62, 89, 64, 91]},
-        {"input": [40, 83, 41, 82, 42, 84, 49, 60, 53, 80], "output": [45, 70, 47, 75, 50, 78, 52, 79, 54, 81]},
-    ]
-
-    dataset = Dataset.from_list(coordinate_data)
+    # Load the dataset
+    dataset_path = os.path.join(DATASET_DIR, 'train_10_50_nodes_germany_center.json')
+    dataset = load_dataset(dataset_path)
 
     # Load model and tokenizer with device
     model, tokenizer, device = load_model_and_tokenizer(model_name, {"": 0})
@@ -162,9 +163,10 @@ def main():
     save_model(trainer, new_model)
 
     # Generate coordinates example
-    input_coords = [80, 123, 81, 122, 81, 124, 89, 100, 93, 120]
+    input_coords = dataset[0]['input'][:10]  # Take the first 5 coordinate pairs from the first example
     generated_coords = generate_coordinates(model, tokenizer, input_coords, device)
-    print(generated_coords)
+    print("Input coordinates:", input_coords)
+    print("Generated output:", generated_coords)
 
 if __name__ == "__main__":
     main()
