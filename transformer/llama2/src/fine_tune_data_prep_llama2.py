@@ -4,14 +4,14 @@ import json
 from tqdm import tqdm
 
 # uncomment the code when running on server gpu
-import os
-os.chdir("/home/Malla/Synthetic_City_Generator")
+# import os
+# os.chdir("/home/Malla/Synthetic_City_Generator")
 
 # Define variables for file paths and node range
-COORD_FOLDER = 'data/coordinates/world/center/transformed/train'
-ADJ_FOLDER = 'data/adj_matrices/world/center/train'
+COORD_FOLDER = 'data/coordinates/germany/center/transformed/train'
+ADJ_FOLDER = 'data/adj_matrices/germany/center/train'
 OUTPUT_FOLDER = 'transformer/llama2/dataset'
-OUTPUT_FILE = 'train_10_50_nodes_world_center.json'
+OUTPUT_FILE = 'train_10_50_nodes_germany_center.json'
 MIN_NODES = 10
 MAX_NODES = 50
 
@@ -31,8 +31,14 @@ def check_node_count(file_name):
     return adj_matrix.shape[0]
 
 def load_prompt_template():
-    with open('transformer/llama2/src/llama2_prompt.txt', 'r') as f:
-        return f.read()
+    template_path = 'transformer/llama2/src/llama2_prompt.txt'
+    try:
+        with open(template_path, 'r') as f:
+            return f.read()
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Prompt template file not found at {template_path}")
+    except Exception as e:
+        raise Exception(f"Error loading prompt template: {str(e)}")
 
 def format_data_for_training(coordinates):
     total_pairs = coordinates.shape[0]
@@ -40,8 +46,8 @@ def format_data_for_training(coordinates):
     input_coords = coordinates[:input_pairs]
     output_coords = coordinates[input_pairs:]
     
-    # Format input coordinates as a string, one pair per line
-    formatted_input = "\n".join(f"({y:.6f}, {x:.6f})" for y, x in input_coords)
+    # Format input coordinates with proper spacing and no decimal points
+    formatted_input = "\n".join(f"({int(y)}, {int(x)})" for y, x in input_coords)
     
     # Load and format prompt template
     prompt_template = load_prompt_template()
@@ -50,8 +56,8 @@ def format_data_for_training(coordinates):
         rest_pairs=len(output_coords)
     )
     
-    # Format output coordinates
-    completion = "\n".join(f"({y:.6f}, {x:.6f})" for y, x in output_coords)
+    # Format output coordinates consistently
+    completion = "\n".join(f"({int(y)}, {int(x)})" for y, x in output_coords)
     
     return {"prompt": prompt, "completion": completion}
 
