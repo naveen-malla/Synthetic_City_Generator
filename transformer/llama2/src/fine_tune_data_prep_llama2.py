@@ -7,7 +7,6 @@ from tqdm import tqdm
 import os
 os.chdir("/home/Malla/Synthetic_City_Generator")
 
-
 # Define variables for file paths and node range
 COORD_FOLDER = 'data/coordinates/world/center/transformed/train'
 ADJ_FOLDER = 'data/adj_matrices/world/center/train'
@@ -31,12 +30,31 @@ def check_node_count(file_name):
     adj_matrix = np.load(adj_file)
     return adj_matrix.shape[0]
 
+def load_prompt_template():
+    with open('transformer/llama2/src/llama2_prompt.txt', 'r') as f:
+        return f.read()
+
 def format_data_for_training(coordinates):
     total_pairs = coordinates.shape[0]
     input_pairs = int(total_pairs * 0.2)
-    input_coords = coordinates[:input_pairs].flatten().tolist()
-    output_coords = coordinates[input_pairs:].flatten().tolist()
-    return {"input": input_coords, "output": output_coords}
+    input_coords = coordinates[:input_pairs]
+    output_coords = coordinates[input_pairs:]
+    
+    # Format input coordinates as a string, one pair per line
+    formatted_input = "\n".join(f"({y:.6f}, {x:.6f})" for y, x in input_coords)
+    
+    # Load and format prompt template
+    prompt_template = load_prompt_template()
+    prompt = prompt_template.format(
+        initial_coordinates=formatted_input,
+        rest_pairs=len(output_coords)
+    )
+    
+    # Format output coordinates
+    completion = "\n".join(f"({y:.6f}, {x:.6f})" for y, x in output_coords)
+    
+    return {"prompt": prompt, "completion": completion}
+
 
 def main():
     matching_files = get_matching_files(COORD_FOLDER, ADJ_FOLDER)
