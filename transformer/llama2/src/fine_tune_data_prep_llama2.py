@@ -4,14 +4,14 @@ import json
 from tqdm import tqdm
 
 # uncomment the code when running on server gpu
-# import os
-# os.chdir("/home/Malla/Synthetic_City_Generator")
+import os
+os.chdir("/home/Malla/Synthetic_City_Generator")
 
 # Define variables for file paths and node range
-COORD_FOLDER = 'data/coordinates/germany/center/transformed/train'
-ADJ_FOLDER = 'data/adj_matrices/germany/center/train'
+COORD_FOLDER = 'data/coordinates/world/center/transformed/train'
+ADJ_FOLDER = 'data/adj_matrices/world/center/train'
 OUTPUT_FOLDER = 'transformer/llama2/dataset'
-OUTPUT_FILE = 'train_10_50_nodes_germany_center.json'
+OUTPUT_FILE = 'train_10_50_nodes_world_center.json'
 MIN_NODES = 10
 MAX_NODES = 50
 
