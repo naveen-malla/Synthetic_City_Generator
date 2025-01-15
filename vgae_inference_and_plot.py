@@ -75,8 +75,8 @@ def create_node_features(coordinates, normalize=True):
 
 def load_city_data(city_name):
     try:
-        coord_path = f'data/coordinates/center/transformed/{city_name}_coords.npy'
-        adj_path = f'data/adj_matrices/center/{city_name}_adj.npy'
+        coord_path = f'data/coordinates/world/center/transformed/{city_name}_coords.npy'
+        adj_path = f'data/adj_matrices/world/center/{city_name}_adj.npy'
         
         coords = np.load(coord_path)
         adj_matrix = np.load(adj_path)
@@ -140,7 +140,7 @@ def visualize_networks(adj_matrix, pred_adj, positions, city_name, is_remote=Fal
     plt.close()
 
 def main():
-    city_name = "butzbach"
+    city_name = "sadri_IN"
     
     device = torch.device("cuda" if torch.cuda.is_available() 
                          else "mps" if torch.backends.mps.is_available() 
@@ -162,7 +162,7 @@ def main():
         )
     ).to(device)
     
-    model.load_state_dict(torch.load('best_vgae_model.pt', map_location=device, weights_only=True))
+    model.load_state_dict(torch.load('model_checkpoints/best_vgae_model_100_500_world_center.pt', map_location=device, weights_only=True))
     model.eval()
     
     with torch.no_grad():
