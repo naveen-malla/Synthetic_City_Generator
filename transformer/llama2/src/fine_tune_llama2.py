@@ -17,6 +17,11 @@ DATASET_DIR = os.path.join(BASE_DIR, 'dataset')
 for directory in [MODEL_DIR, CODE_DIR, RESULTS_DIR, DATASET_DIR]:
     os.makedirs(directory, exist_ok=True)
 
+def load_prompt_template():
+    template_path = os.path.join(CODE_DIR, 'llama2_prompt.txt')
+    with open(template_path, 'r') as f:
+        return f.read()
+
 def load_model_and_tokenizer(model_name, device_map):
     # Check for GPU availability
     if torch.cuda.is_available():
@@ -54,6 +59,8 @@ def load_model_and_tokenizer(model_name, device_map):
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "right"
     
+    # gradient checkpointing for memory efficiency
+    #model.gradient_checkpointing_enable()
     return model, tokenizer, device
 
 def create_peft_config(lora_alpha, lora_dropout, lora_r):
@@ -86,10 +93,9 @@ def create_training_arguments(output_dir, num_train_epochs, per_device_train_bat
         lr_scheduler_type="cosine",
     )
 
-
 def train_model(model, tokenizer, dataset, peft_config, training_arguments):
     def formatting_func(example):
-        return [f"Input: {' '.join(map(str, example['input']))}\nOutput: {' '.join(map(str, example['output']))}"]
+        return [f"{example['prompt']}{example['completion']}"]  
 
     trainer = SFTTrainer(
         model=model,
@@ -107,10 +113,14 @@ def save_model(trainer, new_model):
     save_path = os.path.join(MODEL_DIR, new_model)
     trainer.model.save_pretrained(save_path)
 
-def generate_coordinates(model, tokenizer, input_coords, device):
-    input_str = f"Input: {' '.join(map(str, input_coords))}\nOutput:"
-    input_tokens = tokenizer.encode(input_str, return_tensors="pt").to(device)
-    output = model.generate(input_tokens, max_length=200, num_return_sequences=1)
+def generate_coordinates(model, tokenizer, test_example, device):
+    input_text = test_example['prompt']
+    input_tokens = tokenizer.encode(input_text, return_tensors="pt").to(device)
+    output = model.generate(
+        input_tokens, 
+        max_length=500,  
+        num_return_sequences=1
+    )
     return tokenizer.decode(output[0], skip_special_tokens=True)
 
 def load_dataset(file_path):
@@ -118,10 +128,20 @@ def load_dataset(file_path):
         data = json.load(f)
     return Dataset.from_list(data)
 
+def create_test_example(dataset):
+    # Get the first example from the dataset
+    test_example = dataset[0]
+    print("\nTest Example:")
+    print("Prompt:")
+    print(test_example['prompt'])
+    print("\nExpected Completion:")
+    print(test_example['completion'])
+    return test_example
+
 def main():
-    # Configuration
-    model_name = "meta-llama/Llama-2-7b-hf"
-    new_model = "Llama-2-7b-coordinate-predictor"
+   # Configuration
+    model_name = "meta-llama/Llama-2-13b-hf"
+    new_model = "Llama-2-13b-coordinate-predictor"
     output_dir = RESULTS_DIR
 
     # LoRA configuration
@@ -130,18 +150,21 @@ def main():
     lora_dropout = 0.1
 
     # Training configuration
-    num_train_epochs = 3
-    per_device_train_batch_size = 8
-    gradient_accumulation_steps = 1
-    learning_rate = 5e-5
-    weight_decay = 0.01
+    num_train_epochs = 8
+    per_device_train_batch_size = 3
+    gradient_accumulation_steps = 2
+    learning_rate = 2e-4
+    weight_decay = 0.1
     max_grad_norm = 1.0
     warmup_ratio = 0.1
-    max_seq_length = 1024
+    max_seq_length = 2048
 
     # Load the dataset
-    dataset_path = os.path.join(DATASET_DIR, 'train_10_50_nodes_germany_center.json')
+    dataset_path = os.path.join(DATASET_DIR, 'train_10_50_nodes_world_center.json')
     dataset = load_dataset(dataset_path)
+
+    # Create test example before training
+    test_example = create_test_example(dataset)
 
     # Load model and tokenizer with device
     model, tokenizer, device = load_model_and_tokenizer(model_name, {"": 0})
@@ -162,11 +185,15 @@ def main():
     # Save model
     save_model(trainer, new_model)
 
-    # Generate coordinates example
-    input_coords = dataset[0]['input'][:10]  # Take the first 5 coordinate pairs from the first example
-    generated_coords = generate_coordinates(model, tokenizer, input_coords, device)
-    print("Input coordinates:", input_coords)
-    print("Generated output:", generated_coords)
+    # Generate coordinates using the test example
+    generated_output = generate_coordinates(model, tokenizer, test_example, device)
+    print("\nGenerated Output:")
+    print(generated_output)
+
+    # Optional: Compare with expected completion
+    print("\nComparison:")
+    print("Expected:", test_example['completion'])
+    print("Generated:", generated_output)
 
 if __name__ == "__main__":
     main()
