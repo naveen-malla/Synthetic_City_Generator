@@ -24,7 +24,6 @@ def collate_fn(batch):
 class CityCoordinateDataset(Dataset):
     def __init__(self, coord_folder, min_nodes=10, max_nodes=50):
         self.coord_folder = coord_folder
-        # Filter files during initialization
         self.file_names = []
         for f in os.listdir(coord_folder):
             if f.endswith('_coords.npy'):
@@ -42,12 +41,16 @@ class CityCoordinateDataset(Dataset):
         coords = np.load(coord_file)
         coordinates = np.column_stack((coords['y'], coords['x'])).astype(np.float32)
         
+        # Normalize coordinates to [0, 1]
+        coordinates = coordinates / 255.0
+        
         # Split into input (20%) and target (80%)
         split_idx = int(len(coordinates) * 0.2)
         input_seq = torch.FloatTensor(coordinates[:split_idx])
         target_seq = torch.FloatTensor(coordinates[split_idx:])
         
         return input_seq, target_seq
+
 
 
 class SimpleLSTM(nn.Module):
@@ -112,11 +115,37 @@ def train_model(model, train_loader, valid_loader, num_epochs, device):
         print(f"Training Loss: {avg_train_loss:.4f}")
         print(f"Validation Loss: {avg_valid_loss:.4f}")
 
-
+def test_model(model, test_file, device):
+    # Load test data
+    coords = np.load(test_file)
+    coordinates = np.column_stack((coords['y'], coords['x'])).astype(np.float32)
+    original_coords = coordinates.copy()
+    
+    # Normalize
+    coordinates = coordinates / 255.0
+    
+    # Prepare input
+    split_idx = int(len(coordinates) * 0.2)
+    input_seq = torch.FloatTensor(coordinates[:split_idx]).unsqueeze(0).to(device)
+    
+    # Get predictions
+    model.eval()
+    with torch.no_grad():
+        predictions = model(input_seq)
+        predictions = predictions.cpu().numpy() * 255.0  # Denormalize
+    
+    print("\nTest Results for:", test_file)
+    print("\nOriginal Input Coordinates (20%):")
+    print(original_coords[:split_idx])
+    print("\nOriginal Target Coordinates (80%):")
+    print(original_coords[split_idx:])
+    print("\nPredicted Coordinates:")
+    print(predictions[0])
 
 def main():
     train_folder = 'data/coordinates/world/center/transformed/train'
     valid_folder = 'data/coordinates/world/center/transformed/valid'
+    test_file = 'data/coordinates/world/center/transformed/train/aalten_NL_coords.npy'
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
     # Create datasets
@@ -139,7 +168,10 @@ def main():
     
     model = SimpleLSTM().to(device)
     train_model(model, train_loader, valid_loader, num_epochs=10, device=device)
+    
+    # Test the model
+    test_model(model, test_file, device)
+
 
 if __name__ == "__main__":
     main()
-
