@@ -51,36 +51,41 @@ class CityCoordinateDataset(Dataset):
         
         return input_seq, target_seq
 
-
-
-class SimpleLSTM(nn.Module):
-    def __init__(self, input_size=2, hidden_size=128):  
+class LSTM(nn.Module):
+    def __init__(self, input_size=2, hidden_size=128):
         super().__init__()
         self.lstm = nn.LSTM(input_size, hidden_size, batch_first=True)
-        self.dropout = nn.Dropout(0.2)  # Added dropout
+        self.attention = nn.Linear(hidden_size, 1)  # Attention scores
         self.fc = nn.Linear(hidden_size, 2)
-    
+        self.dropout = nn.Dropout(0.2)
+
     def forward(self, x, target_length=None):
         batch_size = x.size(0)
         if target_length is None:
             target_length = int(x.size(1) / 0.2 * 0.8)
-        
-        lstm_out, (h, c) = self.lstm(x)
+
+        lstm_out, (h, c) = self.lstm(x)  # LSTM output: (batch_size, seq_len, hidden_size)
+        attention_scores = self.attention(lstm_out).squeeze(-1)  # (batch_size, seq_len)
+        attention_weights = torch.softmax(attention_scores, dim=1)  # Normalize scores
+        context_vector = torch.bmm(attention_weights.unsqueeze(1), lstm_out).squeeze(1)  # Weighted sum
+
         outputs = []
         current_input = x[:, -1:, :]
-        
         for _ in range(target_length):
             out, (h, c) = self.lstm(current_input, (h, c))
-            out = self.dropout(out)  # Apply dropout
-            pred = self.fc(out)
-            outputs.append(pred)
-            current_input = pred
-            
+            out = self.dropout(out)
+            pred = self.fc(context_vector + out.squeeze(1))  # Combine context with prediction
+            outputs.append(pred.unsqueeze(1))
+            current_input = pred.unsqueeze(1)
+
         return torch.cat(outputs, dim=1)
 
+
+
 def train_model(model, train_loader, valid_loader, num_epochs, device):
-    criterion = nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    criterion_mse = nn.MSELoss()
+    criterion_l1 = nn.L1Loss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
     best_valid_loss = float('inf')
     
     for epoch in range(num_epochs):
@@ -93,7 +98,12 @@ def train_model(model, train_loader, valid_loader, num_epochs, device):
             
             optimizer.zero_grad()
             output = model(input_seq, target_seq.size(1))
-            loss = criterion(output, target_seq)
+            
+            # Combined loss: MSE + 0.5*L1
+            loss_mse = criterion_mse(output, target_seq)
+            loss_l1 = criterion_l1(output, target_seq)
+            loss = loss_mse + 0.5 * loss_l1
+            
             loss.backward()
             optimizer.step()
             train_loss += loss.item()
@@ -106,14 +116,22 @@ def train_model(model, train_loader, valid_loader, num_epochs, device):
                 input_seq = input_seq.to(device)
                 target_seq = target_seq.to(device)
                 output = model(input_seq, target_seq.size(1))
-                loss = criterion(output, target_seq)
+                
+                # Use same combined loss for validation
+                loss_mse = criterion_mse(output, target_seq)
+                loss_l1 = criterion_l1(output, target_seq)
+                loss = loss_mse + 0.5 * loss_l1
+                
                 valid_loss += loss.item()
         
+        # Report normalized loss
         avg_train_loss = train_loss / len(train_loader)
         avg_valid_loss = valid_loss / len(valid_loader)
         print(f"\nEpoch {epoch+1} Summary:")
-        print(f"Training Loss: {avg_train_loss:.4f}")
-        print(f"Validation Loss: {avg_valid_loss:.4f}")
+        print(f"Training Loss (normalized scale): {avg_train_loss:.4f}")
+        print(f"Validation Loss (normalized scale): {avg_valid_loss:.4f}")
+
+
 
 def test_model(model, test_file, device):
     # Load test data
@@ -166,7 +184,7 @@ def main():
         collate_fn=collate_fn
     )
     
-    model = SimpleLSTM().to(device)
+    model = LSTM().to(device)
     train_model(model, train_loader, valid_loader, num_epochs=10, device=device)
     
     # Test the model
