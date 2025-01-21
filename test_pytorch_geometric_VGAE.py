@@ -108,22 +108,25 @@ def create_node_features(coordinates, normalize=True):
     
     return torch.FloatTensor(node_features)
 
-def load_and_process_matrices(data_dir, min_nodes, max_nodes):
+def load_and_process_matrices(data_dir, min_nodes, max_nodes, split='train'):
+    """
+    Load data from specific split folder (train/valid/test)
+    """
     matrices = []
     features_list = []
     processed_cities = []
 
-    print(f"\nProcessing cities with size range: {min_nodes} - {max_nodes}")
+    print(f"\nProcessing {split} cities with size range: {min_nodes} - {max_nodes}")
     print("-" * 50)
 
-    adj_dir = os.path.join(data_dir, 'adj_matrices/world/center')
-    coord_dir = os.path.join(data_dir, 'coordinates/world/center/transformed')
+    adj_dir = os.path.join(data_dir, f'adj_matrices/world/center/{split}')
+    coord_dir = os.path.join(data_dir, f'coordinates/world/center/transformed/{split}')
 
     if not os.path.exists(adj_dir) or not os.path.exists(coord_dir):
-        raise ValueError(f"Required directories not found in {data_dir}")
+        raise ValueError(f"Required {split} directories not found in {data_dir}")
 
     cities = [f.split('_adj.npy')[0] for f in os.listdir(adj_dir) if f.endswith('_adj.npy')]
-    print(f"Found {len(cities)} potential cities")
+    print(f"Found {len(cities)} potential cities in {split} set")
 
     for city in cities:
         adj_file = os.path.join(adj_dir, f'{city}_adj.npy')
@@ -152,18 +155,12 @@ def load_and_process_matrices(data_dir, min_nodes, max_nodes):
             matrices.append((edge_index, adj_matrix))
             features_list.append(node_features)
             processed_cities.append(city)
-            #print(f"Loaded {city}: Shape {adj_matrix.shape}")
 
         except Exception as e:
             print(f"Error processing {city}: {str(e)}")
             continue
 
-    print(f"\nSuccessfully loaded {len(matrices)} cities")
-    print(f"Size range: {min_nodes}-{max_nodes} nodes")
-
-    if len(matrices) == 0:
-        raise ValueError(f"No valid cities found within size range {min_nodes}-{max_nodes}")
-
+    print(f"\nSuccessfully loaded {len(matrices)} cities from {split} set")
     return matrices, features_list, processed_cities
 
 def train_epoch(model, optimizer, data):
@@ -324,7 +321,7 @@ def train_model(model, train_data, val_data, optimizer, scheduler, num_epochs=10
         if avg_val_auc > (best_val_auc + min_delta):
             best_val_auc = avg_val_auc
             patience_counter = 0
-            torch.save(model.state_dict(), "best_vgae_model_100_500_world.pt")
+            torch.save(model.state_dict(), "best_vgae_model_10_50_world.pt")
         else:
             patience_counter += 1
             
@@ -343,14 +340,18 @@ def train_model(model, train_data, val_data, optimizer, scheduler, num_epochs=10
                       f'Val AUC: {avg_val_auc:.4f}, Val AP: {avg_val_ap:.4f}')
     
     # Load best model
-    model.load_state_dict(torch.load("best_vgae_model_100_500_world.pt"))
+    model.load_state_dict(torch.load("best_vgae_model_10_50_world.pt"))
     return model
 
 def main():
-    min_nodes = 100
-    max_nodes = 500
-    matrices, features_list, processed_cities = load_and_process_matrices('data', min_nodes, max_nodes)
-    train_data, val_data, test_data = split_dataset(matrices, features_list, processed_cities)
+    min_nodes = 10
+    max_nodes = 50
+    
+    # Load data from each split
+    train_data = load_and_process_matrices('data', min_nodes, max_nodes, 'train')
+    val_data = load_and_process_matrices('data', min_nodes, max_nodes, 'valid')
+    test_data = load_and_process_matrices('data', min_nodes, max_nodes, 'test')
+
     print(f"\nTraining on {len(train_data[0])} cities within size range {min_nodes}-{max_nodes}")
 
     # Initialize model
@@ -371,6 +372,7 @@ def main():
     # Load best model and evaluate
     model.eval()
     results_df = final_evaluation(model, test_data[0], test_data[1], test_data[2])
+    print(results_df[0].head())
 
 if __name__ == "__main__":
     main()
