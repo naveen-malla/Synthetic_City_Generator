@@ -7,7 +7,8 @@ from transformers import (
     T5Tokenizer,
     Seq2SeqTrainingArguments,
     Seq2SeqTrainer,
-    DataCollatorForSeq2Seq
+    DataCollatorForSeq2Seq,
+    BitsAndBytesConfig
 )
 from peft import (
     LoraConfig,
@@ -73,28 +74,33 @@ def preprocess_function(examples: Dict) -> Dict:
     return model_inputs
 
 def compute_metrics(eval_pred):
-    """Compute metrics for evaluation"""
-    predictions, labels = eval_pred
-    decoded_preds = tokenizer.batch_decode(predictions, skip_special_tokens=True)
+    predictions = eval_pred.predictions[0] if isinstance(eval_pred.predictions, tuple) else eval_pred.predictions
+    labels = eval_pred.label_ids
+    
+    # Clip predictions to valid token range
+    predictions = np.clip(predictions, 0, tokenizer.vocab_size - 1)
+    
+    # Handle padding and invalid tokens
+    predictions = np.where(predictions < tokenizer.vocab_size, predictions, tokenizer.pad_token_id)
     labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
+    
+    decoded_preds = tokenizer.batch_decode(predictions, skip_special_tokens=True)
     decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
     
-    # Custom metric for coordinate prediction
+    # Rest of your metric computation
     correct_coords = 0
     total_coords = 0
-    
     for pred, label in zip(decoded_preds, decoded_labels):
         pred_coords = set(pred.strip().split('\n'))
         label_coords = set(label.strip().split('\n'))
-        
         correct_coords += len(pred_coords.intersection(label_coords))
         total_coords += len(label_coords)
     
     accuracy = correct_coords / total_coords if total_coords > 0 else 0
-    
-    return {
-        "coordinate_accuracy": accuracy
-    }
+    return {"coordinate_accuracy": accuracy}
+
+
+
 
 def create_trainer(
     model, 
@@ -121,20 +127,55 @@ def create_trainer(
     )
 
 def generate_sample_output(model, tokenizer, sample):
-    """Generate and print sample output"""
-    inputs = tokenizer(sample["prompt"], return_tensors="pt").to(model.device)
-    outputs = model.generate(
-        **inputs,
-        max_length=512,
-        num_beams=4,
-        temperature=0.7,
-        no_repeat_ngram_size=2
-    )
-    
-    print("\nSample Generation:")
-    print("Input:", sample["prompt"])
-    print("Generated:", tokenizer.decode(outputs[0], skip_special_tokens=True))
-    print("Expected:", sample["completion"])
+    try:
+        input_ids = torch.tensor(sample['input_ids']).unsqueeze(0)
+        input_ids = input_ids.to(model.device)
+        
+        # Fix: Use keyword arguments for generate
+        outputs = model.generate(
+            input_ids=input_ids,  # Note the keyword argument
+            max_length=256,
+            num_beams=4,
+            temperature=0.7,
+            no_repeat_ngram_size=2
+        )
+        
+        generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+        expected_text = tokenizer.decode(sample['labels'], skip_special_tokens=True)
+        
+        print("\nSample Generation:")
+        print("Generated:", generated_text)
+        print("Expected:", expected_text)
+    except Exception as e:
+        print(f"Error in generate_sample_output: {str(e)}")
+
+
+
+def create_training_arguments(output_dir):
+    return Seq2SeqTrainingArguments(
+        output_dir=output_dir,
+        num_train_epochs=4,
+        per_device_train_batch_size=4,
+        gradient_accumulation_steps=2,
+        evaluation_strategy="steps",
+        eval_steps=10,
+        logging_steps=10,
+        learning_rate=5e-5,
+        weight_decay=0.01,
+        warmup_steps=10,
+        save_steps=50,
+        bf16=True,
+        save_total_limit=2,
+        load_best_model_at_end=True,
+        metric_for_best_model="coordinate_accuracy",
+        greater_is_better=True,
+        predict_with_generate=True,
+        generation_max_length=512,
+        generation_num_beams=4,
+        remove_unused_columns=True,
+        save_safetensors=False 
+)
+
 
 def main():
     try:
@@ -144,22 +185,32 @@ def main():
         
         # Load datasets
         train_path = os.path.join(DATASET_DIR, 'train_t5_coordinates.json')
-        val_path = os.path.join(DATASET_DIR, 'val_t5_coordinates.json')
+        val_path = os.path.join(DATASET_DIR, 'valid_t5_coordinates.json')
         train_dataset, eval_dataset = load_datasets(train_path, val_path)
+        
+        # Take a small subset for testing
+        train_dataset = train_dataset.select(range(500))  
+        eval_dataset = eval_dataset.select(range(100))     
         
         print(f"Loaded {len(train_dataset)} training examples and {len(eval_dataset)} validation examples")
         
         # Initialize tokenizer and model
         global tokenizer
-        tokenizer = T5Tokenizer.from_pretrained(model_name)
+        tokenizer = T5Tokenizer.from_pretrained(model_name, legacy=False)
+
         
-        # Load model with quantization for efficient fine-tuning
+        quantization_config = BitsAndBytesConfig(
+            load_in_8bit=True,
+            llm_int8_enable_fp32_cpu_offload=True
+        )
+
         model = T5ForConditionalGeneration.from_pretrained(
             model_name,
             device_map="auto",
             torch_dtype=torch.bfloat16,
-            load_in_8bit=True
+            quantization_config=quantization_config
         )
+
         
         # Prepare model for PEFT
         model = prepare_model_for_kbit_training(model)
@@ -181,30 +232,8 @@ def main():
             remove_columns=eval_dataset.column_names
         )
         
-        # Training arguments
-        training_args = Seq2SeqTrainingArguments(
-            output_dir=RESULTS_DIR,
-            num_train_epochs=5,
-            per_device_train_batch_size=16,
-            per_device_eval_batch_size=16,
-            gradient_accumulation_steps=2,
-            evaluation_strategy="steps",
-            eval_steps=100,
-            logging_steps=100,
-            learning_rate=1e-4,
-            weight_decay=0.01,
-            warmup_steps=100,
-            save_steps=1000,
-            bf16=True,
-            save_total_limit=3,
-            load_best_model_at_end=True,
-            metric_for_best_model="coordinate_accuracy",
-            greater_is_better=True,
-            predict_with_generate=True,
-            generation_max_length=512,
-            generation_num_beams=4,
-            include_inputs_for_metrics=True,
-        )
+        # Create training arguments
+        training_args = create_training_arguments(RESULTS_DIR)
         
         # Create and start trainer
         trainer = create_trainer(
