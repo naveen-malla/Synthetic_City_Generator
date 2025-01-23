@@ -167,7 +167,17 @@ def train_epoch(model, optimizer, data):
     model.train()
     optimizer.zero_grad()
 
-    z = model.encode(data.x.to(device), data.edge_index.to(device))
+    # Add edge dropout
+    edge_index = data.edge_index
+    num_edges = edge_index.size(1)
+    drop_rate = 0.1  # Start with 10% dropout
+    
+    # Randomly select edges to keep
+    mask = torch.rand(num_edges) > drop_rate
+    dropped_edge_index = edge_index[:, mask]
+
+    # Use dropped edges for forward pass
+    z = model.encode(data.x.to(device), dropped_edge_index.to(device))
     adj_orig = to_dense_adj(data.edge_index)[0]
     adj_pred = torch.sigmoid(torch.matmul(z, z.t()))
 
@@ -321,7 +331,7 @@ def train_model(model, train_data, val_data, optimizer, scheduler, num_epochs=10
         if avg_val_auc > (best_val_auc + min_delta):
             best_val_auc = avg_val_auc
             patience_counter = 0
-            torch.save(model.state_dict(), "best_vgae_model_10_50_world.pt")
+            torch.save(model.state_dict(), "model_checkpoints/best_vgae_model_improved_edge_dropout_10_50_world.pt")
         else:
             patience_counter += 1
             
@@ -340,7 +350,7 @@ def train_model(model, train_data, val_data, optimizer, scheduler, num_epochs=10
                       f'Val AUC: {avg_val_auc:.4f}, Val AP: {avg_val_ap:.4f}')
     
     # Load best model
-    model.load_state_dict(torch.load("best_vgae_model_10_50_world.pt"))
+    model.load_state_dict(torch.load("model_checkpoints/best_vgae_model_improved_edge_dropout_10_50_world.pt"))
     return model
 
 def main():
