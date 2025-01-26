@@ -163,6 +163,37 @@ def load_and_process_matrices(data_dir, min_nodes, max_nodes, split='train'):
     print(f"\nSuccessfully loaded {len(matrices)} cities from {split} set")
     return matrices, features_list, processed_cities
 
+def edges_intersect(edge1, edge2, node_positions):
+    """Check if two edges intersect"""
+    def ccw(A, B, C):
+        return (C[1] - A[1]) * (B[0] - A[0]) > (B[1] - A[1]) * (C[0] - A[0])
+    
+    A = node_positions[edge1[0]]
+    B = node_positions[edge1[1]]
+    C = node_positions[edge2[0]]
+    D = node_positions[edge2[1]]
+    
+    return ccw(A, C, D) != ccw(B, C, D) and ccw(A, B, C) != ccw(A, B, D)
+
+def compute_geometric_loss(adj_pred, node_positions):
+    """Compute loss based on edge crossings"""
+    edges = torch.nonzero(adj_pred > 0.5).cpu().numpy()
+    loss = 0.0
+    
+    for i in range(len(edges)):
+        for j in range(i + 1, len(edges)):
+            edge1 = (edges[i][0], edges[i][1])
+            edge2 = (edges[j][0], edges[j][1])
+            
+            # Skip if edges share a node
+            if len(set([edge1[0], edge1[1], edge2[0], edge2[1]])) < 4:
+                continue
+                
+            if edges_intersect(edge1, edge2, node_positions):
+                loss += 1.0
+    
+    return torch.tensor(loss, device=adj_pred.device)
+
 def train_epoch(model, optimizer, data):
     model.train()
     optimizer.zero_grad()
@@ -171,24 +202,32 @@ def train_epoch(model, optimizer, data):
     adj_orig = to_dense_adj(data.edge_index)[0]
     adj_pred = torch.sigmoid(torch.matmul(z, z.t()))
 
+    # Original losses
     num_edges = data.edge_index.shape[1]
     num_nodes = data.x.size(0)
     num_possible_edges = num_nodes * (num_nodes - 1) // 2
     pos_weight = torch.tensor((num_possible_edges - num_edges) / num_edges).to(device)
 
-    loss = F.binary_cross_entropy_with_logits(
+    recon_loss = F.binary_cross_entropy_with_logits(
         adj_pred.view(-1),
         adj_orig.view(-1).to(device),
         pos_weight=pos_weight
     )
 
     kl_loss = (0.05 / data.x.size(0)) * model.kl_loss()
-    total_loss = loss + kl_loss
+    
+    # Add geometric loss
+    node_positions = data.x[:, :2].cpu().numpy()  # Extract original coordinates
+    geo_loss = compute_geometric_loss(adj_pred, node_positions)
+    geo_weight = 0.1  # Start with this weight
+    
+    total_loss = recon_loss + kl_loss + geo_weight * geo_loss
 
     total_loss.backward()
     optimizer.step()
 
     return total_loss.item()
+
 
 def split_dataset(matrices, features_list, processed_cities, train_ratio=0.7, val_ratio=0.15):
     n = len(matrices)
@@ -321,7 +360,7 @@ def train_model(model, train_data, val_data, optimizer, scheduler, num_epochs=10
         if avg_val_auc > (best_val_auc + min_delta):
             best_val_auc = avg_val_auc
             patience_counter = 0
-            torch.save(model.state_dict(), "best_vgae_model_10_50_world.pt")
+            torch.save(model.state_dict(), "model_checkpoints/best_vgae_model_improved_edge_intersections_10_50_world.pt")
         else:
             patience_counter += 1
             
@@ -340,7 +379,7 @@ def train_model(model, train_data, val_data, optimizer, scheduler, num_epochs=10
                       f'Val AUC: {avg_val_auc:.4f}, Val AP: {avg_val_ap:.4f}')
     
     # Load best model
-    model.load_state_dict(torch.load("best_vgae_model_10_50_world.pt"))
+    model.load_state_dict(torch.load("model_checkpoints/best_vgae_model_improved_edge_intersections_10_50_world.pt"))
     return model
 
 def main():
