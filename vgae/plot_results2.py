@@ -13,7 +13,7 @@ from test_pytorch_geometric_VGAE import VariationalGCNEncoder
 
 # Define paths
 BASE_DIR = '/Users/naveenmalla/Documents/Projects/Thesis/Images/Final_Results'
-MODEL_DIR = 'vgae_best_model_10_50/test'
+MODEL_DIR = 'vgae_best_model_10_50'
 save_path = os.path.join(BASE_DIR, MODEL_DIR)
 os.makedirs(save_path, exist_ok=True)
 
@@ -115,10 +115,14 @@ def plot_length_distributions(metrics):
     ax1.set_ylabel('Path Length')
     
     # Street Length Distribution
-    sns.histplot(data=metrics['street_length_original'], ax=ax2, color=COLORS['original'], 
-                 alpha=0.7, label='Original', stat='density')
-    sns.histplot(data=metrics['street_length_generated'], ax=ax2, color=COLORS['generated'], 
-                 alpha=0.7, label='Generated', stat='density')
+    sns.kdeplot(data=metrics['street_length_original'], ax=ax2,
+            color=COLORS['original'],
+            alpha=0.8, label='Original',
+            fill=True)
+    sns.kdeplot(data=metrics['street_length_generated'], ax=ax2,
+                color=COLORS['generated'],
+                alpha=0.8, label='Generated',
+                fill=True)
     ax2.set_title('Street Length Distribution')
     ax2.set_xlabel('Street Length')
     ax2.set_ylabel('Density')
@@ -141,6 +145,9 @@ def main():
 
     city_files = sorted(os.listdir(adj_dir))[:10]
     selected_cities = [city.replace('_adj.npy', '') for city in city_files]
+    
+    print(f"\nProcessing {len(selected_cities)} cities...")
+    print("=" * 50)
 
     metrics = {
         'degrees_original': [], 'degrees_generated': [],
@@ -149,7 +156,11 @@ def main():
         'street_length_original': [], 'street_length_generated': []
     }
     
-    for city_name in selected_cities:
+    for i, city_name in enumerate(selected_cities):
+        # Progress tracking
+        if (i + 1) % 100 == 0:
+            print(f"Processed {i + 1}/{len(selected_cities)} cities ({(i + 1)/len(selected_cities)*100:.1f}%)")
+        
         edge_index, adj_matrix, features, coords = load_city_data(city_name, adj_dir, coord_dir)
         
         with torch.no_grad():
@@ -183,9 +194,12 @@ def main():
             length = np.linalg.norm(coords[i] - coords[j])
             metrics['street_length_generated'].append(length)
     
+    print("\nGenerating plots...")
     # Generate plots
     plot_centrality_and_degree(metrics)
     plot_length_distributions(metrics)
+    print("\nDone! Plots saved in:", save_path)
+    print("=" * 50)
 
 if __name__ == "__main__":
     main()
