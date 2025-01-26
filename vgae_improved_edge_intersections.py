@@ -216,12 +216,11 @@ def train_epoch(model, optimizer, data):
 
     kl_loss = (0.05 / data.x.size(0)) * model.kl_loss()
     
-    # Add geometric loss
-    node_positions = data.x[:, :2].cpu().numpy()  # Extract original coordinates
-    geo_loss = compute_geometric_loss(adj_pred, node_positions)
-    geo_weight = 0.1  # Start with this weight
-    
-    total_loss = recon_loss + kl_loss + geo_weight * geo_loss
+    # Add density penalty
+    density_loss = torch.mean((torch.sum(adj_pred, dim=1) - torch.sum(adj_orig, dim=1))**2)
+    density_weight = 0.1
+
+    total_loss = recon_loss + kl_loss + density_weight * density_loss
 
     total_loss.backward()
     optimizer.step()

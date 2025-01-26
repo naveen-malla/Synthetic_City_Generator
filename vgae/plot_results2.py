@@ -13,7 +13,7 @@ from test_pytorch_geometric_VGAE import VariationalGCNEncoder
 
 # Define paths
 BASE_DIR = '/Users/naveenmalla/Documents/Projects/Thesis/Images/Final_Results'
-MODEL_DIR = 'vgae_best_model_10_50'
+MODEL_DIR = 'vgae_best_model_100_500'
 save_path = os.path.join(BASE_DIR, MODEL_DIR)
 os.makedirs(save_path, exist_ok=True)
 
@@ -133,6 +133,10 @@ def plot_length_distributions(metrics):
     plt.close()
 
 def main():
+    # Set node range
+    MIN_NODES = 100
+    MAX_NODES = 500
+    
     # Load model
     model = VGAE(encoder=VariationalGCNEncoder(in_channels=23, hidden_channels=512, out_channels=256, dropout=0.3))
     model.load_state_dict(torch.load('model_checkpoints/best_vgae_model_10_50_world_center.pt', 
@@ -143,10 +147,21 @@ def main():
     adj_dir = 'data/adj_matrices/world/center/test'
     coord_dir = 'data/coordinates/world/center/transformed/test'
 
-    city_files = sorted(os.listdir(adj_dir))[:10]
-    selected_cities = [city.replace('_adj.npy', '') for city in city_files]
+    # Get all city files
+    city_files = sorted(os.listdir(adj_dir))
+    selected_cities = []
     
-    print(f"\nProcessing {len(selected_cities)} cities...")
+    # Filter cities based on node count
+    print(f"\nFiltering cities with {MIN_NODES}-{MAX_NODES} nodes...")
+    for city_file in city_files:
+        city_name = city_file.replace('_adj.npy', '')
+        adj_matrix = np.load(os.path.join(adj_dir, city_file))
+        num_nodes = adj_matrix.shape[0]
+        
+        if MIN_NODES <= num_nodes <= MAX_NODES:
+            selected_cities.append(city_name)
+    
+    print(f"Found {len(selected_cities)} cities in the specified range")
     print("=" * 50)
 
     metrics = {
