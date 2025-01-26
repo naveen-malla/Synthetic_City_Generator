@@ -75,42 +75,31 @@ def load_city_data(city_name, adj_dir, coord_dir):
     edge_index, _ = dense_to_sparse(adj_tensor)
     return edge_index, adj_matrix, node_features, coordinates
 
-def plot_centrality_comparisons(metrics):
+def plot_centrality_and_degree(metrics):
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+    
+    # Degree Distribution
+    ax1.hist(metrics['degrees_original'], bins=np.logspace(0, 3, 20), alpha=0.7, 
+             label='Original', color=COLORS['original'], density=True)
+    ax1.hist(metrics['degrees_generated'], bins=np.logspace(0, 3, 20), alpha=0.7, 
+             label='Generated', color=COLORS['generated'], density=True)
+    ax1.set_xscale('log')
+    ax1.set_yscale('log')
+    ax1.set_title('Degree Distribution')
+    ax1.set_xlabel('Degree (log scale)')
+    ax1.set_ylabel('Frequency (log scale)')
+    ax1.legend()
+    ax1.grid(True, alpha=0.3)
     
     # Closeness Centrality
     sns.boxplot(data=[metrics['closeness_original'], metrics['closeness_generated']], 
-                ax=ax1, palette=[COLORS['original'], COLORS['generated']])
-    ax1.set_xticklabels(['Original', 'Generated'])
-    ax1.set_title('Closeness Centrality Distribution')
-    ax1.set_ylabel('Closeness Centrality')
-    
-    # Betweenness Centrality
-    sns.boxplot(data=[metrics['betweenness_original'], metrics['betweenness_generated']], 
                 ax=ax2, palette=[COLORS['original'], COLORS['generated']])
     ax2.set_xticklabels(['Original', 'Generated'])
-    ax2.set_title('Betweenness Centrality Distribution')
-    ax2.set_ylabel('Betweenness Centrality')
+    ax2.set_title('Closeness Centrality Distribution')
+    ax2.set_ylabel('Closeness Centrality')
     
     plt.tight_layout()
-    plt.savefig(os.path.join(save_path, 'centrality_distributions.png'), dpi=300, bbox_inches='tight')
-    plt.close()
-
-
-def plot_degree_distribution_comparison(metrics):
-    plt.figure(figsize=(10, 6))
-    plt.hist(metrics['degrees_original'], bins=np.logspace(0, 3, 20), alpha=0.7, 
-             label='Original', color=COLORS['original'], density=True)
-    plt.hist(metrics['degrees_generated'], bins=np.logspace(0, 3, 20), alpha=0.7, 
-             label='Generated', color=COLORS['generated'], density=True)
-    plt.xscale('log')
-    plt.yscale('log')
-    plt.title('Degree Distribution Comparison (Log Scale)')
-    plt.xlabel('Degree (log scale)')
-    plt.ylabel('Frequency (log scale)')
-    plt.legend()
-    plt.grid(True, alpha=0.3)
-    plt.savefig(os.path.join(save_path, 'degree_distribution.png'), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(save_path, 'degree_and_centrality.png'), dpi=300, bbox_inches='tight')
     plt.close()
 
 def plot_length_distributions(metrics):
@@ -137,27 +126,6 @@ def plot_length_distributions(metrics):
     plt.savefig(os.path.join(save_path, 'length_distributions.png'), dpi=300, bbox_inches='tight')
     plt.close()
 
-def plot_network_properties(metrics):
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
-    
-    # Clustering Coefficient Distribution
-    sns.boxplot(data=[metrics['clustering_original'], metrics['clustering_generated']], 
-                ax=ax1, palette=[COLORS['original'], COLORS['generated']])
-    ax1.set_xticklabels(['Original', 'Generated'])
-    ax1.set_title('Clustering Coefficient Distribution')
-    ax1.set_ylabel('Clustering Coefficient')
-    
-    # Degree Distribution (alternative view)
-    sns.boxplot(data=[metrics['degrees_original'], metrics['degrees_generated']], 
-                ax=ax2, palette=[COLORS['original'], COLORS['generated']])
-    ax2.set_xticklabels(['Original', 'Generated'])
-    ax2.set_title('Node Degree Distribution')
-    ax2.set_ylabel('Node Degree')
-    
-    plt.tight_layout()
-    plt.savefig(os.path.join(save_path, 'network_properties.png'), dpi=300, bbox_inches='tight')
-    plt.close()
-
 def main():
     # Load model
     model = VGAE(encoder=VariationalGCNEncoder(in_channels=23, hidden_channels=512, out_channels=256, dropout=0.3))
@@ -169,15 +137,13 @@ def main():
     adj_dir = 'data/adj_matrices/world/center/test'
     coord_dir = 'data/coordinates/world/center/transformed/test'
 
-    city_files = sorted(os.listdir(adj_dir))[:10]  # Using first 10 cities
+    city_files = sorted(os.listdir(adj_dir))[:10]
     selected_cities = [city.replace('_adj.npy', '') for city in city_files]
 
     metrics = {
         'degrees_original': [], 'degrees_generated': [],
         'closeness_original': [], 'closeness_generated': [],
-        'betweenness_original': [], 'betweenness_generated': [],
         'path_length_original': [], 'path_length_generated': [],
-        'clustering_original': [], 'clustering_generated': [],
         'street_length_original': [], 'street_length_generated': []
     }
     
@@ -189,7 +155,7 @@ def main():
             pred_adj = torch.sigmoid(torch.matmul(z, z.t())).numpy()
             pred_adj_binary = (pred_adj > 0.9).astype(int)
 
-        # Collect network metrics for both original and generated
+        # Collect network metrics
         G_original = nx.from_numpy_array(adj_matrix)
         G_generated = nx.from_numpy_array(pred_adj_binary)
         
@@ -197,23 +163,17 @@ def main():
         metrics['degrees_original'].extend(dict(G_original.degree()).values())
         metrics['degrees_generated'].extend(dict(G_generated.degree()).values())
         
-        # Centrality measures
+        # Closeness centrality
         metrics['closeness_original'].extend(nx.closeness_centrality(G_original).values())
         metrics['closeness_generated'].extend(nx.closeness_centrality(G_generated).values())
-        metrics['betweenness_original'].extend(nx.betweenness_centrality(G_original).values())
-        metrics['betweenness_generated'].extend(nx.betweenness_centrality(G_generated).values())
         
-        # Path length (only if network is connected)
+        # Path length
         if nx.is_connected(G_original):
             metrics['path_length_original'].append(nx.average_shortest_path_length(G_original))
         if nx.is_connected(G_generated):
             metrics['path_length_generated'].append(nx.average_shortest_path_length(G_generated))
         
-        # Clustering coefficient
-        metrics['clustering_original'].extend(nx.clustering(G_original).values())
-        metrics['clustering_generated'].extend(nx.clustering(G_generated).values())
-        
-        # Street lengths using coordinates
+        # Street lengths
         for (i, j) in G_original.edges():
             length = np.linalg.norm(coords[i] - coords[j])
             metrics['street_length_original'].append(length)
@@ -221,11 +181,9 @@ def main():
             length = np.linalg.norm(coords[i] - coords[j])
             metrics['street_length_generated'].append(length)
     
-    # Generate all plots
-    plot_centrality_comparisons(metrics)
-    plot_degree_distribution_comparison(metrics)
+    # Generate plots
+    plot_centrality_and_degree(metrics)
     plot_length_distributions(metrics)
-    plot_network_properties(metrics)
 
 if __name__ == "__main__":
     main()
