@@ -94,6 +94,7 @@ def plot_centrality_and_degree(metrics):
     # Closeness Centrality
     sns.boxplot(data=[metrics['closeness_original'], metrics['closeness_generated']], 
                 ax=ax2, palette=[COLORS['original'], COLORS['generated']])
+    ax2.set_xticks([0, 1])  
     ax2.set_xticklabels(['Original', 'Generated'])
     ax2.set_title('Closeness Centrality Distribution')
     ax2.set_ylabel('Closeness Centrality')
@@ -108,6 +109,7 @@ def plot_length_distributions(metrics):
     # Path Length Distribution
     sns.boxplot(data=[metrics['path_length_original'], metrics['path_length_generated']], 
                 ax=ax1, palette=[COLORS['original'], COLORS['generated']])
+    ax1.set_xticks([0, 1])  
     ax1.set_xticklabels(['Original', 'Generated'])
     ax1.set_title('Average Path Length Distribution')
     ax1.set_ylabel('Path Length')
