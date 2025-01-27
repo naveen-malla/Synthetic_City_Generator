@@ -103,12 +103,12 @@ def calculate_errors(original, predicted):
         'percentage': np.mean(relative_errors)
     }
 
-def plot_model_comparison(original_full, predicted, initial, model_name, city_name, errors):
+def plot_model_comparison(original_full, predicted, initial, model_name, city_name, errors, save_path=None):
     # Set style parameters
-    plt.style.use('bmh')  # Using built-in style
+    plt.style.use('bmh')
     
     # Create figure with a light gray background
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 7))  # Increased figure height
     fig.patch.set_facecolor('#f0f0f0')
     
     # Common plotting parameters
@@ -141,11 +141,22 @@ def plot_model_comparison(original_full, predicted, initial, model_name, city_na
     # Main title with metrics
     title = f"{model_name} Predictions for {city_name}\n"
     metrics = f"Mean Euclidean Distance: {errors['euclidean']:.2f} | Mean Percentage Error: {errors['percentage']:.2f}%"
-    plt.suptitle(title + metrics, fontsize=14, y=1.05)
     
-    # Adjust layout and display
-    plt.tight_layout()
+    # Add more space at the top for the title
+    plt.subplots_adjust(top=0.85)
+    plt.suptitle(title + metrics, fontsize=14, y=0.98)
+    
+    # Adjust layout
+    plt.tight_layout(rect=[0, 0, 1, 0.90])
+    
+    # Save the plot if save_path is provided
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight', 
+                   facecolor=fig.get_facecolor(), 
+                   pad_inches=0.3)  # Added padding
+    
     plt.show()
+
 
 
 
