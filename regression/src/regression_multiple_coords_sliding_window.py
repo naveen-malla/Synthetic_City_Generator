@@ -3,9 +3,10 @@ import numpy as np
 from sklearn.linear_model import LinearRegression, Ridge, Lasso, ElasticNet
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_squared_error
+import matplotlib.pyplot as plt
 
 class CityCoordinateDataset:
-    def __init__(self, coord_folder, min_nodes=10, max_nodes=50):
+    def __init__(self, coord_folder, min_nodes=20, max_nodes=50):
         self.coord_folder = coord_folder
         self.file_names = []
         for f in os.listdir(coord_folder):
@@ -71,13 +72,37 @@ def predict_city_coordinates(coordinates, model, scaler, seq_length=5):
     
     return np.array(original_coords), np.array(predictions)
 
+def plot_best_city(original, predicted, initial, title="Best City Prediction Comparison"):
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+
+    # Plot original coordinates
+    axes[0].scatter(original[:, 0], original[:, 1], c='blue', label='Original Remaining')
+    axes[0].set_title("Original Coordinates")
+    axes[0].set_xlabel("Y Coordinate")
+    axes[0].set_ylabel("X Coordinate")
+    axes[0].legend()
+    axes[0].grid(True)
+
+    # Plot predicted coordinates
+    axes[1].scatter(initial[:, 0], initial[:, 1], c='green', label='Initial Coordinates')
+    axes[1].scatter(predicted[:, 0], predicted[:, 1], c='red', label='Predicted Remaining')
+    axes[1].set_title("Predicted Coordinates")
+    axes[1].set_xlabel("Y Coordinate")
+    axes[1].set_ylabel("X Coordinate")
+    axes[1].legend()
+    axes[1].grid(True)
+
+    plt.suptitle(title)
+    plt.tight_layout()
+    plt.show()
+
 def main():
     base_path = 'data/coordinates/world/center/original'
     train_folder = os.path.join(base_path, 'train')
     test_folder = os.path.join(base_path, 'test')
     
     seq_length = 5
-    model_type = 'elasticnet'
+    model_type = 'linear'
     alpha = 1.0
     
     # Load and prepare training data
@@ -100,32 +125,31 @@ def main():
     print(f"\nTraining {model_type} regression model...")
     model, scaler = train_model(X_train, y_train, model_type=model_type, alpha=alpha)
     
-    # Test predictions on sample cities
+    # Test predictions on all cities
     test_dataset = CityCoordinateDataset(test_folder)
     print(f"\nTesting predictions on {len(test_dataset)} cities...")
     
-    # Sample a few test cities
-    num_samples = min(5, len(test_dataset))
-    total_rmse = 0
+    best_rmse = float('inf')
+    best_city = None
+    best_original = None
+    best_predicted = None
+    best_initial = None
     
-    for i in range(num_samples):
+    for i in range(len(test_dataset)):
         test_city = test_dataset[i]
         original, predicted = predict_city_coordinates(test_city, model, scaler, seq_length)
         
         rmse = np.sqrt(mean_squared_error(original, predicted))
-        total_rmse += rmse
         
-        print(f"\nCity {i+1}:")
-        print(f"Initial {seq_length} coordinates:")
-        print(test_city[:seq_length])
-        print(f"\nOriginal remaining coordinates:")
-        print(original)
-        print(f"\nPredicted coordinates:")
-        print(predicted)
-        print(f"Number of coordinates predicted: {len(predicted)}")
-        print(f"RMSE: {rmse:.4f}")
+        if rmse < best_rmse:
+            best_rmse = rmse
+            best_city = test_city
+            best_original = original
+            best_predicted = predicted
+            best_initial = test_city[:seq_length]
     
-    print(f"\nAverage RMSE across {num_samples} test cities: {total_rmse/num_samples:.4f}")
+    print(f"\nBest city RMSE: {best_rmse:.4f}")
+    plot_best_city(best_original, best_predicted, best_initial, "Best City Prediction Comparison")
 
 if __name__ == "__main__":
     main()
