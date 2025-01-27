@@ -24,11 +24,13 @@ class CityCoordinateDataset:
         coord_file = os.path.join(self.coord_folder, self.file_names[idx])
         coords = np.load(coord_file)
         coordinates = np.column_stack((coords['y'], coords['x'])).astype(np.float32)
-        city_name = self.file_names[idx].replace('_coords.npy', '')  # Extract city name from file name
+        city_name = self.file_names[idx].replace('_coords.npy', '')
         return coordinates, city_name
 
-
 def create_sliding_window_sequences(coordinates, seq_length=5):
+    if len(coordinates) <= seq_length:
+        return np.array([]), np.array([])
+    
     sequences = []
     targets = []
     for i in range(len(coordinates) - seq_length):
@@ -38,26 +40,26 @@ def create_sliding_window_sequences(coordinates, seq_length=5):
         targets.append(target)
     return np.array(sequences), np.array(targets)
 
-def train_model(X_train, y_train, model_type='linear', alpha=1.0):
-    if model_type == 'linear':
-        model = LinearRegression()
-    elif model_type == 'ridge':
-        model = Ridge(alpha=alpha)
-    elif model_type == 'lasso':
-        model = Lasso(alpha=0.001)
-    elif model_type == 'elasticnet':
-        model = ElasticNet(alpha=0.01, l1_ratio=0.5)
+def train_models(X_train, y_train):
+    models = {
+        'Linear Regression': (LinearRegression(), StandardScaler()),
+        'Ridge': (Ridge(alpha=0.1), StandardScaler()),
+        'Lasso': (Lasso(alpha=0.001), StandardScaler()),
+        'ElasticNet': (ElasticNet(alpha=0.01, l1_ratio=0.5), StandardScaler())
+    }
     
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X_train)
-    model.fit(X_scaled, y_train)
+    trained_models = {}
+    for name, (model, scaler) in models.items():
+        X_scaled = scaler.fit_transform(X_train)
+        model.fit(X_scaled, y_train)
+        trained_models[name] = (model, scaler)
     
-    return model, scaler
+    return trained_models
 
 def predict_city_coordinates(coordinates, model, scaler, seq_length=5):
-    """
-    Predicts all remaining coordinates for a city given the first seq_length coordinates.
-    """
+    if len(coordinates) <= seq_length:
+        return np.array([]), np.array([])
+    
     original_coords = coordinates[seq_length:]
     current_sequence = coordinates[:seq_length].copy()
     predictions = []
@@ -68,17 +70,19 @@ def predict_city_coordinates(coordinates, model, scaler, seq_length=5):
         next_coord = model.predict(scaled_input)[0]
         predictions.append(next_coord)
         
-        # Slide window
-        current_sequence = np.roll(current_sequence, -1, axis=0)
-        current_sequence[-1] = next_coord
+        current_sequence = np.vstack((current_sequence[1:], next_coord))
     
     return np.array(original_coords), np.array(predictions)
 
 def calculate_errors(original, predicted):
-    """
-    Calculate errors between original and predicted coordinates
-    """
-    # Scale coordinates to a more interpretable range (0-100)
+    if len(original) == 0 or len(predicted) == 0:
+        return {'euclidean': float('inf'), 'percentage': float('inf')}
+    
+    # Calculate coordinate-wise percentage errors
+    coord_ranges = np.ptp(original, axis=0)
+    relative_errors = np.abs(original - predicted) / coord_ranges * 100
+    
+    # Calculate scaled Euclidean distances
     lat_range = np.ptp(original[:, 0])
     lon_range = np.ptp(original[:, 1])
     
@@ -92,26 +96,16 @@ def calculate_errors(original, predicted):
         (predicted[:, 1] - np.min(original[:, 1])) / lon_range * 100
     ])
     
-    # Calculate Euclidean distance on scaled coordinates
     euclidean_distances = np.sqrt(np.sum((scaled_original - scaled_predicted) ** 2, axis=1))
-    mean_euclidean = np.mean(euclidean_distances)
-    
-    # Calculate percentage error relative to the range of coordinates
-    coord_ranges = np.ptp(original, axis=0)
-    relative_errors = np.abs(original - predicted) / coord_ranges * 100
-    mean_percentage = np.mean(relative_errors)
     
     return {
-        'euclidean': mean_euclidean,
-        'percentage': mean_percentage
+        'euclidean': np.mean(euclidean_distances),
+        'percentage': np.mean(relative_errors)
     }
-
-
 
 def plot_model_comparison(original_full, predicted, initial, model_name, city_name, errors):
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
     
-    # Left subplot - Original coordinates
     ax1.scatter(original_full[:, 0], original_full[:, 1], 
                c='blue', label='Original Coordinates', alpha=0.6)
     ax1.scatter(initial[:, 0], initial[:, 1], 
@@ -122,7 +116,6 @@ def plot_model_comparison(original_full, predicted, initial, model_name, city_na
     ax1.legend()
     ax1.grid(True)
     
-    # Right subplot - Predicted coordinates
     ax2.scatter(predicted[:, 0], predicted[:, 1], 
                c='red', label='Predicted Coordinates', alpha=0.6)
     ax2.scatter(initial[:, 0], initial[:, 1], 
@@ -133,49 +126,16 @@ def plot_model_comparison(original_full, predicted, initial, model_name, city_na
     ax2.legend()
     ax2.grid(True)
     
-    plt.suptitle(f"{model_name} for {city_name}\nMean Euclidean Distance: {errors['euclidean']:.6f} | Mean Percentage Error: {errors['percentage']:.2f}%", 
+    plt.suptitle(f"{model_name} for {city_name}\nMean Euclidean Distance: {errors['euclidean']:.2f} | Mean Percentage Error: {errors['percentage']:.2f}%", 
                 fontsize=16)
     plt.tight_layout()
     plt.show()
-
-
-def plot_all_model_comparisons(best_city, best_city_name, seq_length, models_dict):
-    initial = best_city[:seq_length]
-    original_full = best_city
-    
-    print(f"\nCoordinate Analysis for {best_city_name}")
-    print(f"Initial {seq_length} coordinates used for prediction:")
-    print(initial)
-    
-    for model_name, model in models_dict.items():
-        print(f"\n{model_name} Results:")
-        sequences, targets = create_sliding_window_sequences(best_city, seq_length)
-        
-        scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(sequences)
-        model.fit(X_scaled, targets)
-        
-        original, predicted = predict_city_coordinates(best_city, model, scaler, seq_length)
-        errors = calculate_errors(original, predicted)
-        
-        print("Original coordinates:")
-        print(original)
-        print("\nPredicted coordinates:")
-        print(predicted)
-        print(f"Number of coordinates: Original = {len(original)}, Predicted = {len(predicted)}")
-        print(f"Mean Euclidean Distance: {errors['euclidean']:.6f}")
-        print(f"Mean Percentage Error: {errors['percentage']:.2f}%")
-        
-        plot_model_comparison(original_full, predicted, initial, 
-                            model_name, best_city_name, errors)
 
 def main():
     base_path = 'data/coordinates/world/center/original'
     train_folder = os.path.join(base_path, 'train')
     test_folder = os.path.join(base_path, 'test')
-    
     seq_length = 5
-    alpha = 1.0
     
     # Load and prepare training data
     train_dataset = CityCoordinateDataset(train_folder)
@@ -191,37 +151,36 @@ def main():
                 train_sequences.extend(sequences)
                 train_targets.extend(targets)
     
-    # Convert to numpy arrays
     X_train = np.array(train_sequences)
     y_train = np.array(train_targets)
-    
     print(f"Training data shape: {X_train.shape}, {y_train.shape}")
     
-    # Get a random city from test set
+    # Train all models
+    trained_models = train_models(X_train, y_train)
+    
+    # Select random test city
     test_dataset = CityCoordinateDataset(test_folder)
     random_idx = np.random.randint(len(test_dataset))
     test_city, city_name = test_dataset[random_idx]
     
     print(f"\nSelected random city for evaluation: {city_name}")
+    print(f"Initial {seq_length} coordinates used for prediction:")
+    print(test_city[:seq_length])
     
-    # Define models
-    models_dict = {
-        'Linear Regression': LinearRegression(),
-        'Ridge': Ridge(alpha=alpha),
-        'Lasso': Lasso(alpha=alpha),
-        'ElasticNet': ElasticNet(alpha=alpha, l1_ratio=0.5)
-    }
-    
-    # Train all models on the full training data
-    for model_name, model in models_dict.items():
-        print(f"\nTraining {model_name}...")
-        scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(X_train)
-        model.fit(X_scaled, y_train)
-    
-    # Plot comparisons for all models using the random city
-    plot_all_model_comparisons(test_city, city_name, seq_length, models_dict)
-
+    # Evaluate all models
+    for name, (model, scaler) in trained_models.items():
+        print(f"\n{name} Results:")
+        original, predicted = predict_city_coordinates(test_city, model, scaler, seq_length)
+        
+        print("Original coordinates:")
+        print(original)
+        print("\nPredicted coordinates:")
+        print(predicted)
+        print(f"Number of coordinates: Original = {len(original)}, Predicted = {len(predicted)}")
+        
+        errors = calculate_errors(original, predicted)
+        plot_model_comparison(test_city, predicted, test_city[:seq_length], 
+                            name, city_name, errors)
 
 if __name__ == "__main__":
     main()
