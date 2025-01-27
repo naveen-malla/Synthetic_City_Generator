@@ -151,6 +151,79 @@ def plot_model_comparison(original_full, predicted, initial, model_name, city_na
     plt.show()
 
 
+def evaluate_model_performance(test_dataset, trained_models, seq_length=5):
+    """
+    Evaluate models on all test cities and generate performance statistics
+    """
+    # Initialize statistics dictionary for each model
+    stats = {model_name: {
+        'mean_euclidean': [],
+        'mean_percentage': [],
+        'num_predictions': [],
+        'convergence_rate': 0,  # Percentage of successful predictions
+        'min_error': float('inf'),
+        'max_error': 0,
+        'std_error': 0
+    } for model_name in trained_models.keys()}
+    
+    # Evaluate each model on all test cities
+    total_cities = len(test_dataset)
+    for i in range(total_cities):
+        test_city, city_name = test_dataset[i]
+        
+        for model_name, (model, scaler) in trained_models.items():
+            original, predicted = predict_city_coordinates(test_city, model, scaler, seq_length)
+            
+            if len(original) > 0 and len(predicted) > 0:
+                errors = calculate_errors(original, predicted)
+                stats[model_name]['mean_euclidean'].append(errors['euclidean'])
+                stats[model_name]['mean_percentage'].append(errors['percentage'])
+                stats[model_name]['num_predictions'].append(len(predicted))
+                
+                # Update min/max errors
+                stats[model_name]['min_error'] = min(stats[model_name]['min_error'], 
+                                                   errors['euclidean'])
+                stats[model_name]['max_error'] = max(stats[model_name]['max_error'], 
+                                                   errors['euclidean'])
+    
+    # Calculate final statistics
+    for model_name in trained_models.keys():
+        model_stats = stats[model_name]
+        num_successful = len(model_stats['mean_euclidean'])
+        
+        if num_successful > 0:
+            model_stats['convergence_rate'] = (num_successful / total_cities) * 100
+            model_stats['avg_euclidean'] = np.mean(model_stats['mean_euclidean'])
+            model_stats['avg_percentage'] = np.mean(model_stats['mean_percentage'])
+            model_stats['std_error'] = np.std(model_stats['mean_euclidean'])
+            model_stats['avg_predictions'] = np.mean(model_stats['num_predictions'])
+        
+        # Clean up temporary lists
+        del model_stats['mean_euclidean']
+        del model_stats['mean_percentage']
+        del model_stats['num_predictions']
+    
+    # Create performance comparison table
+    headers = ['Model', 'Avg Euclidean', 'Avg % Error', 'Min Error', 'Max Error', 
+              'Std Error', 'Avg # Predictions', 'Convergence %']
+    
+    print("\nModel Performance Comparison:")
+    print("-" * 100)
+    print(f"{headers[0]:<15} {headers[1]:<15} {headers[2]:<15} {headers[3]:<15} "
+          f"{headers[4]:<15} {headers[5]:<15} {headers[6]:<15} {headers[7]:<15}")
+    print("-" * 100)
+    
+    for model_name, model_stats in stats.items():
+        print(f"{model_name:<15} "
+              f"{model_stats['avg_euclidean']:<15.2f} "
+              f"{model_stats['avg_percentage']:<15.2f} "
+              f"{model_stats['min_error']:<15.2f} "
+              f"{model_stats['max_error']:<15.2f} "
+              f"{model_stats['std_error']:<15.2f} "
+              f"{model_stats['avg_predictions']:<15.2f} "
+              f"{model_stats['convergence_rate']:<15.2f}")
+    
+    return stats
 
 
 def main():
@@ -180,8 +253,14 @@ def main():
     # Train all models
     trained_models = train_models(X_train, y_train)
     
-    # Select random test city
+    # Load test dataset
     test_dataset = CityCoordinateDataset(test_folder)
+    
+    # Generate performance statistics
+    print("\nGenerating model performance statistics...")
+    performance_stats = evaluate_model_performance(test_dataset, trained_models, seq_length)
+    
+    # Select random test city for visualization
     random_idx = np.random.randint(len(test_dataset))
     test_city, city_name = test_dataset[random_idx]
     
@@ -203,6 +282,7 @@ def main():
         errors = calculate_errors(original, predicted)
         plot_model_comparison(test_city, predicted, test_city[:seq_length], 
                             name, city_name, errors)
+
 
 if __name__ == "__main__":
     main()
