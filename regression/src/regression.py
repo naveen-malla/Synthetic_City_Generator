@@ -54,35 +54,76 @@ def train_model(X_train, y_train, model_type='linear', alpha=1.0):
     return model, scaler
 
 
-def visualize_predictions(actual, predicted, title="Predictions vs Actual"):
-    plt.figure(figsize=(12, 8))
+def visualize_predictions(actual, predicted, title="Enhanced Predictions vs Actual"):
+    # Set style parameters
+    plt.style.use('bmh')
     
-    # Plot with different colors and markers
-    plt.scatter(actual[:, 0], actual[:, 1], 
-               label='Actual', 
-               alpha=0.6, 
-               c='blue', 
-               marker='o', 
-               s=50)
-    plt.scatter(predicted[:, 0], predicted[:, 1], 
-               label='Predicted', 
-               alpha=0.6, 
-               c='red', 
-               marker='x', 
-               s=50)
+    # Create figure with custom styling
+    fig, ax = plt.subplots(figsize=(14, 10))
+    fig.patch.set_facecolor('#e9ecef')  # Soft gray
+    ax.set_facecolor('#f8f9fa')  # Very light blue-gray
     
-    # Add grid and labels
-    plt.xlabel('Y Coordinate')
-    plt.ylabel('X Coordinate')
-    plt.title(title)
-    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-    plt.grid(True, alpha=0.3)
+    # Enhanced grid styling
+    ax.grid(True, linestyle='--', linewidth=2, color='#e9ecef', zorder=0)
+    ax.set_axisbelow(True)
     
-    # Optional: Plot connecting lines between actual and predicted points
+    # Plot points with enhanced styling
+    ax.scatter(actual[:, 0], actual[:, 1], 
+              label='Actual', 
+              alpha=0.8,
+              c='#4361ee',  # Royal blue
+              marker='o', 
+              s=100,
+              edgecolor='white',
+              linewidth=1.5,
+              zorder=3)
+    
+    ax.scatter(predicted[:, 0], predicted[:, 1], 
+              label='Predicted', 
+              alpha=0.8,
+              c='#ef233c',  # Bright red
+              marker='x', 
+              s=100,
+              linewidth=1.5,
+              zorder=2)
+    
+    # Plot connecting lines
     for i in range(len(actual)):
-        plt.plot([actual[i,0], predicted[i,0]], 
+        ax.plot([actual[i,0], predicted[i,0]], 
                 [actual[i,1], predicted[i,1]], 
-                'g-', alpha=0.1)
+                color='#2b9348',  # Forest green
+                linestyle='-',
+                linewidth=1,
+                alpha=0.3,
+                zorder=2)
+    
+    # Enhanced labels and title
+    ax.set_xlabel('Y Coordinate', fontsize=12, fontweight='bold', labelpad=10)
+    ax.set_ylabel('X Coordinate', fontsize=12, fontweight='bold', labelpad=10)
+    ax.set_title(title, fontsize=14, fontweight='bold', pad=20)
+    
+    # Custom legend styling
+    legend = ax.legend(frameon=True, 
+                      facecolor='white', 
+                      edgecolor='#dee2e6',
+                      fontsize=10,
+                      loc='upper right',
+                      borderpad=1,
+                      shadow=True)
+    
+    # Enhance spines
+    for spine in ax.spines.values():
+        spine.set_color('#dee2e6')
+        spine.set_linewidth(1.2)
+    
+    # Adjust tick parameters
+    ax.tick_params(axis='both', 
+                  which='major', 
+                  labelsize=10, 
+                  length=5, 
+                  width=1.2, 
+                  colors='#495057',
+                  grid_alpha=0.3)
     
     plt.tight_layout()
     plt.show()
@@ -101,6 +142,7 @@ def evaluate_model(model, X_test, y_test, scaler):
         'r2': r2,
         'predictions': predictions
     }
+
 def main():
     # Set paths to your data directories
     base_path = 'data/coordinates/world/center/original'
@@ -109,7 +151,7 @@ def main():
     
     # Model parameters
     seq_length = 5
-    model_type = 'ridge'
+    model_type = 'elasticnet'
     alpha = 1.0
     
     # Load and prepare training data
@@ -154,7 +196,7 @@ def main():
     print(f"Test Set Performance:")
     print(f"RMSE: {results['rmse']:.4f}")
     print(f"R2 Score: {results['r2']:.4f}")
-    
+
     # Visualize results (using a subset for clarity)
     sample_size = min(1000, len(y_test))
     visualize_predictions(
