@@ -53,38 +53,6 @@ def train_model(X_train, y_train, model_type='linear', alpha=1.0):
     
     return model, scaler
 
-def explain_prediction(model, sequence, scaler, actual=None):
-    """
-    Explain why model made this prediction
-    """
-    seq_scaled = scaler.transform(sequence.reshape(1, -1))
-    pred = model.predict(seq_scaled)[0]
-    
-    coefficients = model.coef_  # Shape: (2, sequence_length)
-    num_prev_coords = len(sequence) // 2
-    
-    explanation = []
-    total_contribution = np.zeros(2)
-    
-    # Process each previous coordinate's contribution
-    for i in range(num_prev_coords):
-        x_idx, y_idx = 2*i, 2*i + 1
-        
-        # Calculate contributions for x and y separately
-        contrib_x = float(coefficients[0, x_idx] * seq_scaled[0, x_idx])
-        contrib_y = float(coefficients[1, y_idx] * seq_scaled[0, y_idx])
-        
-        total_contribution[0] += contrib_x
-        total_contribution[1] += contrib_y
-        
-        explanation.append(f"Coordinate {i+1} contribution: ({contrib_x:.4f}, {contrib_y:.4f})")
-    
-    if actual is not None:
-        error = np.sqrt(np.sum((pred - actual)**2))
-        explanation.append(f"Prediction error: {error:.4f}")
-    
-    return pred, explanation
-
 
 def visualize_predictions(actual, predicted, title="Predictions vs Actual"):
     plt.figure(figsize=(12, 8))
@@ -188,19 +156,14 @@ def main():
     print(f"R2 Score: {results['r2']:.4f}")
     
     # Visualize results (using a subset for clarity)
-    sample_size = min(100, len(y_test))
+    sample_size = min(1000, len(y_test))
     visualize_predictions(
         y_test[:sample_size], 
         results['predictions'][:sample_size],
-        "Test Set: First 100 Predictions vs Actual"
+        "Test Set: First 1000 Predictions vs Actual"
     )
     
-    # Example prediction explanation
-    print("\nExample Prediction Explanation:")
-    test_seq = X_test[0]
-    pred, explanation = explain_prediction(model, test_seq, scaler, y_test[0])
-    for exp in explanation:
-        print(exp)
+   
 
 if __name__ == "__main__":
     main()
