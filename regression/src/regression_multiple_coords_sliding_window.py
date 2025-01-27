@@ -104,32 +104,50 @@ def calculate_errors(original, predicted):
     }
 
 def plot_model_comparison(original_full, predicted, initial, model_name, city_name, errors):
+    # Set style parameters
+    plt.style.use('bmh')  # Using built-in style
+    
+    # Create figure with a light gray background
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+    fig.patch.set_facecolor('#f0f0f0')
     
-    ax1.scatter(original_full[:, 0], original_full[:, 1], 
-               c='blue', label='Original Coordinates', alpha=0.6)
-    ax1.scatter(initial[:, 0], initial[:, 1], 
-               c='green', label='Initial Coordinates', alpha=0.8, s=100)
-    ax1.set_title("Original Coordinates")
-    ax1.set_xlabel("Y Coordinate")
-    ax1.set_ylabel("X Coordinate")
-    ax1.legend()
-    ax1.grid(True)
+    # Common plotting parameters
+    plot_params = {
+        'original': {'color': '#1f77b4', 'alpha': 0.7, 's': 80, 'label': 'Original Coordinates'},
+        'initial': {'color': '#2ecc71', 'alpha': 1.0, 's': 120, 'label': 'Initial Coordinates', 'edgecolor': 'white'},
+        'predicted': {'color': '#e74c3c', 'alpha': 0.7, 's': 80, 'label': 'Predicted Coordinates'}
+    }
     
-    ax2.scatter(predicted[:, 0], predicted[:, 1], 
-               c='red', label='Predicted Coordinates', alpha=0.6)
-    ax2.scatter(initial[:, 0], initial[:, 1], 
-               c='green', label='Initial Coordinates', alpha=0.8, s=100)
-    ax2.set_title("Predicted Coordinates")
-    ax2.set_xlabel("Y Coordinate")
-    ax2.set_ylabel("X Coordinate")
-    ax2.legend()
-    ax2.grid(True)
+    # Left subplot - Original coordinates
+    ax1.scatter(original_full[:, 0], original_full[:, 1], **plot_params['original'])
+    ax1.scatter(initial[:, 0], initial[:, 1], **plot_params['initial'])
+    ax1.set_title("Original Coordinates", fontsize=12, pad=15)
+    ax1.set_xlabel("Latitude", fontsize=10)
+    ax1.set_ylabel("Longitude", fontsize=10)
+    ax1.grid(True, linestyle='--', alpha=0.7)
+    ax1.set_facecolor('white')
+    ax1.legend(frameon=True, facecolor='white', edgecolor='none')
     
-    plt.suptitle(f"{model_name} for {city_name}\nMean Euclidean Distance: {errors['euclidean']:.2f} | Mean Percentage Error: {errors['percentage']:.2f}%", 
-                fontsize=16)
+    # Right subplot - Predicted coordinates
+    ax2.scatter(predicted[:, 0], predicted[:, 1], **plot_params['predicted'])
+    ax2.scatter(initial[:, 0], initial[:, 1], **plot_params['initial'])
+    ax2.set_title("Predicted Coordinates", fontsize=12, pad=15)
+    ax2.set_xlabel("Latitude", fontsize=10)
+    ax2.set_ylabel("Longitude", fontsize=10)
+    ax2.grid(True, linestyle='--', alpha=0.7)
+    ax2.set_facecolor('white')
+    ax2.legend(frameon=True, facecolor='white', edgecolor='none')
+    
+    # Main title with metrics
+    title = f"{model_name} Predictions for {city_name}\n"
+    metrics = f"Mean Euclidean Distance: {errors['euclidean']:.2f} | Mean Percentage Error: {errors['percentage']:.2f}%"
+    plt.suptitle(title + metrics, fontsize=14, y=1.05)
+    
+    # Adjust layout and display
     plt.tight_layout()
     plt.show()
+
+
 
 def main():
     base_path = 'data/coordinates/world/center/original'
