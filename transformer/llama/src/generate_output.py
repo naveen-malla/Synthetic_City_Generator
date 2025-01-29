@@ -20,16 +20,21 @@ def load_trained_model(base_model_name, adapter_path):
         bnb_4bit_use_double_quant=False
     )
 
+    cache_dir = os.path.join('transformer', 'llama', 'models')
+    
     # Load base model
     base_model = AutoModelForCausalLM.from_pretrained(
         base_model_name,
         quantization_config=bnb_config,
         device_map="auto",
-        cache_dir=os.path.join('transformer', 'llama', 'models')
+        cache_dir=cache_dir
     )
     
-    # Load tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(base_model_name)
+    # Load tokenizer with same cache directory
+    tokenizer = AutoTokenizer.from_pretrained(
+        base_model_name,
+        cache_dir=cache_dir  # Add this line
+    )
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "right"
     
