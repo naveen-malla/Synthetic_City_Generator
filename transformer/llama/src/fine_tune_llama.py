@@ -111,8 +111,13 @@ def train_model(model, tokenizer, dataset, peft_config, training_arguments):
 
 def save_model(trainer, tokenizer, new_model):
     save_path = os.path.join(MODEL_DIR, new_model)
+    # Save the adapter config and weights
     trainer.model.save_pretrained(save_path)
+    # Save tokenizer
     tokenizer.save_pretrained(save_path)
+    # Explicitly save adapter config
+    trainer.model.config.to_json_file(os.path.join(save_path, "adapter_config.json"))[10]
+
 
 def generate_coordinates(model, tokenizer, test_example, device):
     input_text = test_example['prompt']
