@@ -109,9 +109,10 @@ def train_model(model, tokenizer, dataset, peft_config, training_arguments):
     trainer.train()
     return trainer
 
-def save_model(trainer, new_model):
+def save_model(trainer, tokenizer, new_model):
     save_path = os.path.join(MODEL_DIR, new_model)
     trainer.model.save_pretrained(save_path)
+    tokenizer.save_pretrained(save_path)
 
 def generate_coordinates(model, tokenizer, test_example, device):
     input_text = test_example['prompt']
