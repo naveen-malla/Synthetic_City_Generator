@@ -116,7 +116,7 @@ def save_model(trainer, tokenizer, new_model):
     # Save tokenizer
     tokenizer.save_pretrained(save_path)
     # Explicitly save adapter config
-    trainer.model.config.to_json_file(os.path.join(save_path, "adapter_config.json"))[10]
+    trainer.model.config.to_json_file(os.path.join(save_path, "adapter_config.json"))
 
 
 def generate_coordinates(model, tokenizer, test_example, device):
@@ -189,7 +189,7 @@ def main():
     trainer = train_model(model, tokenizer, dataset, peft_config, training_arguments)
 
     # Save model
-    save_model(trainer, new_model)
+    save_model(trainer, tokenizer, new_model)
 
     # Generate coordinates using the test example
     generated_output = generate_coordinates(model, tokenizer, test_example, device)
