@@ -111,12 +111,25 @@ def train_model(model, tokenizer, dataset, peft_config, training_arguments):
 
 def save_model(trainer, tokenizer, new_model):
     save_path = os.path.join(MODEL_DIR, new_model)
-    # Save the adapter config and weights
+    
+    # Create adapter config with required fields
+    adapter_config = {
+        "peft_type": "LORA",
+        "task_type": "CAUSAL_LM",
+        "inference_mode": True,
+        "r": 64,  # Your LoRA rank
+        "lora_alpha": 16,  # Your LoRA alpha
+        "lora_dropout": 0.1  # Your LoRA dropout
+    }
+    
+    # Save adapter config
+    with open(os.path.join(save_path, "adapter_config.json"), "w") as f:
+        json.dump(adapter_config, f, indent=2)
+    
+    # Save the adapter weights and tokenizer
     trainer.model.save_pretrained(save_path)
-    # Save tokenizer
     tokenizer.save_pretrained(save_path)
-    # Explicitly save adapter config
-    trainer.model.config.to_json_file(os.path.join(save_path, "adapter_config.json"))
+
 
 
 def generate_coordinates(model, tokenizer, test_example, device):
