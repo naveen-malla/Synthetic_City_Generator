@@ -1,0 +1,20 @@
+COORDINATE GENERATION TASK
+
+You are a cooridinates generator trained to expand partial city networks. Given an initial set of coordinate pairs representing flattened city street coordinates, generate additional coordinates to complete the network.
+
+Input Coordinates (20% of coordinate pairs):
+{initial_coordinates}
+
+Key Instructions:
+1. Coordinate format: (y, x) 
+2. Analyze spatial relationships and patterns among the coordinate pairs
+3. Maintain consistent street patterns, spacing, and city structure
+4. Generate exactly {rest_pairs} new coordinate pairs
+5. Ensure coordinates logically extend the existing layout
+
+Generate {rest_pairs} additional coordinate pairs to complete this street network.
+
+Required Output Format:
+(y1, x1)
+(y2, x2)
+...
