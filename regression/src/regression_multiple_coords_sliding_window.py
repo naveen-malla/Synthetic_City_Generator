@@ -44,7 +44,7 @@ def train_models(X_train, y_train):
     models = {
         'Linear Regression': (LinearRegression(), StandardScaler()),
         'Ridge': (Ridge(alpha=0.1), StandardScaler()),
-        'Lasso': (Lasso(alpha=0.001), StandardScaler()),
+        'Lasso': (Lasso(alpha=0.1), StandardScaler()),
         'ElasticNet': (ElasticNet(alpha=0.01, l1_ratio=0.5), StandardScaler())
     }
     
@@ -255,7 +255,9 @@ def main():
     
     # Load test dataset
     test_dataset = CityCoordinateDataset(test_folder)
-    
+    print(f"\nProcessing {len(test_dataset)} test cities...")
+
+
     # Generate performance statistics
     print("\nGenerating model performance statistics...")
     performance_stats = evaluate_model_performance(test_dataset, trained_models, seq_length)
