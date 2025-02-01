@@ -45,68 +45,12 @@ class VariationalGCNEncoder(torch.nn.Module):
         x3 = self.dropout(x3)
         return self.conv_mu(x3, edge_index), self.conv_logstd(x3, edge_index)
 
-def create_node_features(coordinates, normalize=True):
-    """
-    Create rich node features from coordinates including positional and structural information.
-    
-    Args:
-        coordinates: numpy array of shape (N, 2) containing x,y coordinates
-        normalize: whether to normalize features
-    
-    Returns:
-        node_features: torch tensor of shape (N, num_features)
-    """
-    import torch
-    import numpy as np
-    from sklearn.preprocessing import StandardScaler
-    
+def create_node_features(coordinates, normalize=False):
     N = coordinates.shape[0]
-    features_list = []
-    
-    # 1. Original coordinates
-    features_list.append(coordinates)
-    
-    # 2. Relative positions to center of mass
-    center = np.mean(coordinates, axis=0)
-    relative_pos = coordinates - center
-    features_list.append(relative_pos)
-    
-    # 3. Radial and angular coordinates
-    distances = np.linalg.norm(relative_pos, axis=1).reshape(-1, 1)
-    angles = np.arctan2(relative_pos[:, 1], relative_pos[:, 0]).reshape(-1, 1)
-    features_list.append(distances)
-    features_list.append(angles)
-    
-    # 4. Local density features
-    from sklearn.neighbors import NearestNeighbors
-    k = min(10, N-1)  # number of neighbors to consider
-    nbrs = NearestNeighbors(n_neighbors=k).fit(coordinates)
-    distances, _ = nbrs.kneighbors(coordinates)
-    local_density = np.mean(distances, axis=1).reshape(-1, 1)
-    features_list.append(local_density)
-    
-    # 5. Grid-based positional encoding
-    grid_size = 8
-    x_pos = coordinates[:, 0].reshape(-1, 1)
-    y_pos = coordinates[:, 1].reshape(-1, 1)
-    pe_x = np.zeros((N, grid_size))
-    pe_y = np.zeros((N, grid_size))
-    
-    for i in range(grid_size):
-        pe_x[:, i] = np.sin(2 ** i * np.pi * x_pos.flatten())
-        pe_y[:, i] = np.cos(2 ** i * np.pi * y_pos.flatten())
-    
-    features_list.extend([pe_x, pe_y])
-    
-    # Combine all features
-    node_features = np.hstack(features_list)
-    
-    # Normalize if requested
-    if normalize:
-        scaler = StandardScaler()
-        node_features = scaler.fit_transform(node_features)
-    
-    return torch.FloatTensor(node_features)
+    # Create constant single feature for each node
+    node_features = torch.ones((N, 1), dtype=torch.float)
+    return node_features
+
 
 def load_and_process_matrices(data_dir, min_nodes, max_nodes, split='train'):
     """
@@ -357,7 +301,7 @@ def main():
     # Initialize model
     model = VGAE(
         encoder=VariationalGCNEncoder(
-            in_channels=23,  
+            in_channels=1,  
             hidden_channels=512,
             out_channels=256,
             dropout=0.3
