@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from torch_geometric.utils import dense_to_sparse
 from torch_geometric.nn import VGAE, GCNConv
 import os
-from vgae.VGAE import VariationalGCNEncoder
+from VGAE import VariationalGCNEncoder
 
 
 def create_node_features(coordinates, normalize=False):
