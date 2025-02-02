@@ -1,71 +1,220 @@
+import os
+import numpy as np
+import torch
 import matplotlib.pyplot as plt
 import seaborn as sns
-import os
+import networkx as nx
+from torch_geometric.utils import dense_to_sparse
+from torch_geometric.nn import VGAE
+from sklearn.metrics import roc_auc_score, average_precision_score
+from sklearn.preprocessing import StandardScaler
+from sklearn.neighbors import NearestNeighbors
+from VGAE import VariationalGCNEncoder
 
-# Define configurable paths
+# Define paths
 BASE_DIR = '/Users/naveenmalla/Documents/Projects/Thesis/Images/Final_Results'
 MODEL_DIR = 'vgae_best_model_100_500'
-
-# Create full path and ensure directories exist
 save_path = os.path.join(BASE_DIR, MODEL_DIR)
 os.makedirs(save_path, exist_ok=True)
 
-# Set style and theme
+# Color scheme
+COLORS = {
+    'original': '#2ECC71',  # Green
+    'generated': '#E74C3C', # Red
+    'betweenness': '#1ABC9C',  # Turquoise
+    'closeness': '#3498DB'    # Light Blue
+}
+
+# Set plotting style
 plt.style.use('seaborn-v0_8-darkgrid')
 sns.set_theme(style="darkgrid")
 plt.rcParams['font.family'] = 'sans-serif'
 
-# Data points. The values here are hardcoded because the training code did not have the capability to plot the metrics. it printed the values to terminal and the values were saved after training each of these models.
-# Since retraining the model will take a lot of time, I have hardcoded the values here.
-epochs = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
-loss_values = [0.9916, 0.9846, 0.9797, 0.9780, 0.9776, 0.9768, 0.9765, 0.9760, 0.9758, 0.9755]
-auc_values = [0.9079, 0.9155, 0.9210, 0.9209, 0.9209, 0.9217, 0.9220, 0.9218, 0.9221, 0.9222]
-ap_values = [0.0969, 0.1047, 0.1111, 0.1109, 0.1109, 0.1120, 0.1122, 0.1120, 0.1125, 0.1125]
+def create_node_features(coordinates, normalize=True):
+    N = coordinates.shape[0]
+    features_list = []
+    
+    features_list.append(coordinates)
+    center = np.mean(coordinates, axis=0)
+    relative_pos = coordinates - center
+    features_list.append(relative_pos)
+    
+    distances = np.linalg.norm(relative_pos, axis=1).reshape(-1, 1)
+    angles = np.arctan2(relative_pos[:, 1], relative_pos[:, 0]).reshape(-1, 1)
+    features_list.extend([distances, angles])
+    
+    k = min(10, N-1)
+    nbrs = NearestNeighbors(n_neighbors=k).fit(coordinates)
+    distances, _ = nbrs.kneighbors(coordinates)
+    local_density = np.mean(distances, axis=1).reshape(-1, 1)
+    features_list.append(local_density)
+    
+    grid_size = 8
+    pe_x = np.zeros((N, grid_size))
+    pe_y = np.zeros((N, grid_size))
+    for i in range(grid_size):
+        pe_x[:, i] = np.sin(2 ** i * np.pi * coordinates[:, 0])
+        pe_y[:, i] = np.cos(2 ** i * np.pi * coordinates[:, 1])
+    features_list.extend([pe_x, pe_y])
+    
+    node_features = np.hstack(features_list)
+    if normalize:
+        scaler = StandardScaler()
+        node_features = scaler.fit_transform(node_features)
+    return torch.FloatTensor(node_features)
 
-# Plot 1: Loss Progression (Horizontal)
-plt.figure(figsize=(15, 5))
-plt.plot(epochs, loss_values, color='#E74C3C', linewidth=2.5, marker='o', 
-         markersize=6, markeredgecolor='white', markeredgewidth=1.5,
-         label='Training Loss')
-plt.title('Loss Progression', fontsize=14, pad=15)
-plt.xlabel('Epochs', fontsize=12)
-plt.ylabel('Loss Value', fontsize=12)
-plt.grid(True, alpha=0.3)
-plt.xticks(epochs) 
-plt.legend(loc='upper right')
+def load_city_data(city_name, adj_dir, coord_dir):
+    coord_path = os.path.join(coord_dir, f'{city_name}_coords.npy')
+    adj_path = os.path.join(adj_dir, f'{city_name}_adj.npy')
+    coords = np.load(coord_path)
+    adj_matrix = np.load(adj_path)
+    adj_matrix = (adj_matrix > 0).astype(float)
+    coordinates = np.column_stack((coords['y'], coords['x'])).astype(np.float32)
+    node_features = create_node_features(coordinates)
+    adj_tensor = torch.FloatTensor(adj_matrix)
+    edge_index, _ = dense_to_sparse(adj_tensor)
+    return edge_index, adj_matrix, node_features, coordinates
 
-plt.tight_layout()
-# Save loss plot
-plt.savefig(os.path.join(save_path, MODEL_DIR +'_loss.png'), dpi=300, bbox_inches='tight')
-plt.close()
+def plot_centrality_and_degree(metrics):
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+    
+    # Degree Distribution
+    ax1.hist(metrics['degrees_original'], bins=np.logspace(0, 3, 20), alpha=0.7, 
+             label='Original', color=COLORS['original'], density=True)
+    ax1.hist(metrics['degrees_generated'], bins=np.logspace(0, 3, 20), alpha=0.7, 
+             label='Generated', color=COLORS['generated'], density=True)
+    ax1.set_xscale('log')
+    ax1.set_yscale('log')
+    ax1.set_title('Degree Distribution')
+    ax1.set_xlabel('Degree (log scale)')
+    ax1.set_ylabel('Frequency (log scale)')
+    ax1.legend()
+    ax1.grid(True, alpha=0.3)
+    
+    # Closeness Centrality
+    sns.boxplot(data=[metrics['closeness_original'], metrics['closeness_generated']], 
+                ax=ax2, palette=[COLORS['original'], COLORS['generated']])
+    ax2.set_xticks([0, 1])  
+    ax2.set_xticklabels(['Original', 'Generated'])
+    ax2.set_title('Closeness Centrality Distribution')
+    ax2.set_ylabel('Closeness Centrality')
+    
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_path, 'degree_and_centrality.png'), dpi=300, bbox_inches='tight')
+    plt.close()
 
-# Plot 2: AUC and AP side by side
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 5))
+def plot_length_distributions(metrics):
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+    
+    # Path Length Distribution
+    sns.boxplot(data=[metrics['path_length_original'], metrics['path_length_generated']], 
+                ax=ax1, palette=[COLORS['original'], COLORS['generated']])
+    ax1.set_xticks([0, 1])  
+    ax1.set_xticklabels(['Original', 'Generated'])
+    ax1.set_title('Average Path Length Distribution')
+    ax1.set_ylabel('Path Length')
+    
+    # Street Length Distribution
+    sns.kdeplot(data=metrics['street_length_original'], ax=ax2,
+            color=COLORS['original'],
+            alpha=0.8, label='Original',
+            fill=True)
+    sns.kdeplot(data=metrics['street_length_generated'], ax=ax2,
+                color=COLORS['generated'],
+                alpha=0.8, label='Generated',
+                fill=True)
+    ax2.set_title('Street Length Distribution')
+    ax2.set_xlabel('Street Length')
+    ax2.set_ylabel('Density')
+    ax2.legend()
+    
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_path, 'length_distributions.png'), dpi=300, bbox_inches='tight')
+    plt.close()
 
-ax1.set_xticks(epochs)  
-ax2.set_xticks(epochs)
+def main():
+    # Set node range
+    MIN_NODES = 100
+    MAX_NODES = 500
+    
+    # Load model
+    model = VGAE(encoder=VariationalGCNEncoder(in_channels=23, hidden_channels=512, out_channels=256, dropout=0.3))
+    model.load_state_dict(torch.load('model_checkpoints/best_vgae_model_10_50_world_center.pt', 
+                                   map_location='cpu',
+                                   weights_only=True))
+    model.eval()
 
-# AUC plot
-ax1.plot(epochs, auc_values, color='#2ECC71', linewidth=2.5, marker='o',
-         markersize=6, markeredgecolor='white', markeredgewidth=1.5,
-         label='Training AUC')
-ax1.set_title('AUC Progression', fontsize=14, pad=15)
-ax1.set_xlabel('Epochs', fontsize=12)
-ax1.set_ylabel('AUC Score', fontsize=12)
-ax1.grid(True, alpha=0.3)
-ax1.legend(loc='lower right')
+    adj_dir = 'data/adj_matrices/world/center/test'
+    coord_dir = 'data/coordinates/world/center/transformed/test'
 
-# AP plot
-ax2.plot(epochs, ap_values, color='#3498DB', linewidth=2.5, marker='o',
-         markersize=6, markeredgecolor='white', markeredgewidth=1.5,
-         label='Training AP')
-ax2.set_title('AP Progression', fontsize=14, pad=15)
-ax2.set_xlabel('Epochs', fontsize=12)
-ax2.set_ylabel('AP Score', fontsize=12)
-ax2.grid(True, alpha=0.3)
-ax2.legend(loc='lower right')
+    # Get all city files
+    city_files = sorted(os.listdir(adj_dir))
+    selected_cities = []
+    
+    # Filter cities based on node count
+    print(f"\nFiltering cities with {MIN_NODES}-{MAX_NODES} nodes...")
+    for city_file in city_files:
+        city_name = city_file.replace('_adj.npy', '')
+        adj_matrix = np.load(os.path.join(adj_dir, city_file))
+        num_nodes = adj_matrix.shape[0]
+        
+        if MIN_NODES <= num_nodes <= MAX_NODES:
+            selected_cities.append(city_name)
+    
+    print(f"Found {len(selected_cities)} cities in the specified range")
+    print("=" * 50)
 
-plt.tight_layout()
-# Save metrics plot
-plt.savefig(os.path.join(save_path, MODEL_DIR + '_metrics.png'), dpi=300, bbox_inches='tight')
-plt.close()
+    metrics = {
+        'degrees_original': [], 'degrees_generated': [],
+        'closeness_original': [], 'closeness_generated': [],
+        'path_length_original': [], 'path_length_generated': [],
+        'street_length_original': [], 'street_length_generated': []
+    }
+    
+    for i, city_name in enumerate(selected_cities):
+        # Progress tracking
+        if (i + 1) % 100 == 0:
+            print(f"Processed {i + 1}/{len(selected_cities)} cities ({(i + 1)/len(selected_cities)*100:.1f}%)")
+        
+        edge_index, adj_matrix, features, coords = load_city_data(city_name, adj_dir, coord_dir)
+        
+        with torch.no_grad():
+            z = model.encode(features, edge_index)
+            pred_adj = torch.sigmoid(torch.matmul(z, z.t())).numpy()
+            pred_adj_binary = (pred_adj > 0.9).astype(int)
+
+        # Collect network metrics
+        G_original = nx.from_numpy_array(adj_matrix)
+        G_generated = nx.from_numpy_array(pred_adj_binary)
+        
+        # Degrees
+        metrics['degrees_original'].extend(dict(G_original.degree()).values())
+        metrics['degrees_generated'].extend(dict(G_generated.degree()).values())
+        
+        # Closeness centrality
+        metrics['closeness_original'].extend(nx.closeness_centrality(G_original).values())
+        metrics['closeness_generated'].extend(nx.closeness_centrality(G_generated).values())
+        
+        # Path length
+        if nx.is_connected(G_original):
+            metrics['path_length_original'].append(nx.average_shortest_path_length(G_original))
+        if nx.is_connected(G_generated):
+            metrics['path_length_generated'].append(nx.average_shortest_path_length(G_generated))
+        
+        # Street lengths
+        for (i, j) in G_original.edges():
+            length = np.linalg.norm(coords[i] - coords[j])
+            metrics['street_length_original'].append(length)
+        for (i, j) in G_generated.edges():
+            length = np.linalg.norm(coords[i] - coords[j])
+            metrics['street_length_generated'].append(length)
+    
+    print("\nGenerating plots...")
+    # Generate plots
+    plot_centrality_and_degree(metrics)
+    plot_length_distributions(metrics)
+    print("\nDone! Plots saved in:", save_path)
+    print("=" * 50)
+
+if __name__ == "__main__":
+    main()
