@@ -3,7 +3,7 @@ import requests
 import pandas as pd
 
 # Load the country codes and names from the CSV file
-df_countries = pd.read_csv('Countries.csv')
+df_countries = pd.read_csv('data_processing/Countries.csv')
 
 # Define the base URL for the Overpass API
 overpass_url = "http://overpass-api.de/api/interpreter"
@@ -46,7 +46,8 @@ for index, row in df_countries.iterrows():
                     cities.append(f"{name}\n")
 
         # Save to a text file within the 'cities' folder
-        with open(f'cities/{country_name}_cities_{country_code}.txt', 'w') as file:
+        os.makedirs('data_processing/cities', exist_ok=True)
+        with open(f'data_processing/cities/{country_name}_cities_{country_code}.txt', 'w') as file:
             file.writelines(cities)
             
         print(f"Finished processing {country_name}")
