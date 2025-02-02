@@ -68,38 +68,34 @@ def visualize_predictions(actual, predicted, title="Enhanced Predictions vs Actu
     ax.set_axisbelow(True)
     
     # Plot points with enhanced styling
-    ax.scatter(actual[:, 0], actual[:, 1], 
-              label='Actual', 
-              alpha=0.8,
-              c='#4361ee',  # Royal blue
-              marker='o', 
-              s=100,
-              edgecolor='white',
-              linewidth=1.5,
-              zorder=3)
-    
-    ax.scatter(predicted[:, 0], predicted[:, 1], 
-              label='Predicted', 
-              alpha=0.8,
-              c='#ef233c',  # Bright red
-              marker='x', 
-              s=100,
-              linewidth=1.5,
-              zorder=2)
-    
-    # Plot connecting lines
+    ax.scatter(actual[:, 1], actual[:, 0],  
+            label='Actual', 
+            alpha=0.6, 
+               c='blue', 
+               marker='o', 
+               s=50)
+
+    ax.scatter(predicted[:, 1], predicted[:, 0], 
+            label='Predicted', 
+             alpha=0.6, 
+               c='red', 
+               marker='x', 
+               s=50)
+
+    # Plot connecting lines with swapped coordinates
     for i in range(len(actual)):
-        ax.plot([actual[i,0], predicted[i,0]], 
-                [actual[i,1], predicted[i,1]], 
-                color='#2b9348',  # Forest green
+        ax.plot([actual[i,1], predicted[i,1]], 
+                [actual[i,0], predicted[i,0]], 
+                color='#2b9348',
                 linestyle='-',
                 linewidth=1,
                 alpha=0.3,
                 zorder=2)
-    
-    # Enhanced labels and title
-    ax.set_xlabel('Y Coordinate', fontsize=12, fontweight='bold', labelpad=10)
-    ax.set_ylabel('X Coordinate', fontsize=12, fontweight='bold', labelpad=10)
+
+    # Update labels
+    ax.set_xlabel('X Coordinate', fontsize=12, fontweight='bold', labelpad=10)
+    ax.set_ylabel('Y Coordinate', fontsize=12, fontweight='bold', labelpad=10)
+
     ax.set_title(title, fontsize=14, fontweight='bold', pad=20)
     
     # Custom legend styling
@@ -151,7 +147,7 @@ def main():
     
     # Model parameters
     seq_length = 5
-    model_type = 'elasticnet'
+    model_type = 'ridge'
     alpha = 1.0
     
     # Load and prepare training data
@@ -202,7 +198,7 @@ def main():
     visualize_predictions(
         y_test[:sample_size], 
         results['predictions'][:sample_size],
-        "Test Set: First 1000 Predictions vs Actual"
+        "Ridge: First 1000 Predictions vs Actual"
     )
     
    
