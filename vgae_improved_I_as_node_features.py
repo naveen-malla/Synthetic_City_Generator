@@ -158,7 +158,7 @@ def evaluate(model, data, adj_matrix):
     with torch.no_grad():
         z = model.encode(data.x, data.edge_index)
         pred_adj = torch.sigmoid(torch.matmul(z, z.t())).detach().to('cpu').numpy()
-        binary_pred_adj = (pred_adj > 0.5).astype(float)
+        binary_pred_adj = (pred_adj > 0.9).astype(float)
         auc = roc_auc_score(adj_matrix.flatten(), pred_adj.flatten())
         ap = average_precision_score(adj_matrix.flatten(), pred_adj.flatten())
         accuracy = (binary_pred_adj == adj_matrix).mean()
@@ -174,7 +174,7 @@ def final_evaluation(model, matrices, features_list, processed_cities):
             data = Data(x=features, edge_index=edge_index).to(device)
             z = model.encode(data.x, data.edge_index)
             pred_adj = torch.sigmoid(torch.matmul(z, z.t())).detach().to('cpu').numpy()
-            binary_pred_adj = (pred_adj > 0.5).astype(float)
+            binary_pred_adj = (pred_adj > 0.9).astype(float)
             
         auc = roc_auc_score(adj_matrix.flatten(), pred_adj.flatten())
         ap = average_precision_score(adj_matrix.flatten(), pred_adj.flatten())
