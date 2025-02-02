@@ -77,7 +77,7 @@ def process_graph(G, city_name, country_code, mode):
     return dense_matrix
 
 def main():
-    cities_folder = Path('cities')
+    cities_folder = Path('data_processing/cities')
     
     while True:
         choice = input("Choose processing mode:\n1. Whole city\n2. City center\nEnter choice (1/2): ")
