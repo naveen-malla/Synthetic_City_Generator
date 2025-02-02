@@ -4,7 +4,7 @@ import os
 
 # Define configurable paths
 BASE_DIR = '/Users/naveenmalla/Documents/Projects/Thesis/Images/Final_Results'
-MODEL_DIR = 'vgae_best_model'
+MODEL_DIR = 'vgae_best_model_100_500'
 
 # Create full path and ensure directories exist
 save_path = os.path.join(BASE_DIR, MODEL_DIR)
@@ -15,11 +15,12 @@ plt.style.use('seaborn-v0_8-darkgrid')
 sns.set_theme(style="darkgrid")
 plt.rcParams['font.family'] = 'sans-serif'
 
-# Data points
-epochs = [ 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
-loss_values = [ 1.0367, 1.0329, 1.0305, 1.0294, 1.0280, 1.0278, 1.0272, 1.0270, 1.0268, 1.0268]
-auc_values = [ 0.8162, 0.8169, 0.8172, 0.8173, 0.8170, 0.8179, 0.8174, 0.8178, 0.8179, 0.8179]
-ap_values = [ 0.2233, 0.2239, 0.2240, 0.2238, 0.2236, 0.2246, 0.2238, 0.2246, 0.2244, 0.2245]
+# Data points. The values here are hardcoded because the training code did not have the capability to plot the metrics. it printed the values to terminal and the values were saved after training each of these models.
+# Since retraining the model will take a lot of time, I have hardcoded the values here.
+epochs = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+loss_values = [0.9916, 0.9846, 0.9797, 0.9780, 0.9776, 0.9768, 0.9765, 0.9760, 0.9758, 0.9755]
+auc_values = [0.9079, 0.9155, 0.9210, 0.9209, 0.9209, 0.9217, 0.9220, 0.9218, 0.9221, 0.9222]
+ap_values = [0.0969, 0.1047, 0.1111, 0.1109, 0.1109, 0.1120, 0.1122, 0.1120, 0.1125, 0.1125]
 
 # Plot 1: Loss Progression (Horizontal)
 plt.figure(figsize=(15, 5))
