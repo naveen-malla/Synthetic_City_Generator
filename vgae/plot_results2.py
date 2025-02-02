@@ -9,7 +9,7 @@ from torch_geometric.nn import VGAE
 from sklearn.metrics import roc_auc_score, average_precision_score
 from sklearn.preprocessing import StandardScaler
 from sklearn.neighbors import NearestNeighbors
-from test_pytorch_geometric_VGAE import VariationalGCNEncoder
+from VGAE import VariationalGCNEncoder
 
 # Define paths
 BASE_DIR = '/Users/naveenmalla/Documents/Projects/Thesis/Images/Final_Results'
