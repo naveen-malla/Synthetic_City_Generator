@@ -105,7 +105,7 @@ def main():
         )
     ).to(device)
     
-    model.load_state_dict(torch.load('model_checkpoints/best_vgae_model_improved_I_as_node_features_10_50_world.pt', map_location=device, weights_only=True))
+    model.load_state_dict(torch.load('vgae/model_checkpoints/best_vgae_model_experiment_single_node_feature_10_50_world.pt', map_location=device, weights_only=True))
     model.eval()
     
     with torch.no_grad():

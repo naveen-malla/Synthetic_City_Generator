@@ -321,7 +321,7 @@ def train_model(model, train_data, val_data, optimizer, scheduler, num_epochs=10
         if avg_val_auc > (best_val_auc + min_delta):
             best_val_auc = avg_val_auc
             patience_counter = 0
-            torch.save(model.state_dict(), "best_vgae_model_10_50_world.pt")
+            torch.save(model.state_dict(), "vgae/model_checkpoints/best_vgae_model_10_50_world.pt")
         else:
             patience_counter += 1
             
@@ -340,7 +340,7 @@ def train_model(model, train_data, val_data, optimizer, scheduler, num_epochs=10
                       f'Val AUC: {avg_val_auc:.4f}, Val AP: {avg_val_ap:.4f}')
     
     # Load best model
-    model.load_state_dict(torch.load("best_vgae_model_10_50_world.pt"))
+    model.load_state_dict(torch.load("vgae/model_checkpoints/best_vgae_model_10_50_world.pt"))
     return model
 
 def main():

@@ -326,12 +326,14 @@ def train_model(model, train_data, val_data, optimizer, scheduler, num_epochs=10
         
         # Learning rate scheduling
         scheduler.step(avg_val_auc)
-        
+
         # Early stopping with minimum improvement threshold
         if avg_val_auc > (best_val_auc + min_delta):
             best_val_auc = avg_val_auc
             patience_counter = 0
-            torch.save(model.state_dict(), "vgae/model_checkpoints/best_vgae_model_improved_edge_dropout_10_50_world.pt")
+
+            # Save the model
+            torch.save(model.state_dict(), "vgae/model_checkpoints/best_vgae_model_experiment_edge_dropout_10_50_world.pt")
         else:
             patience_counter += 1
             
@@ -350,7 +352,7 @@ def train_model(model, train_data, val_data, optimizer, scheduler, num_epochs=10
                       f'Val AUC: {avg_val_auc:.4f}, Val AP: {avg_val_ap:.4f}')
     
     # Load best model
-    model.load_state_dict(torch.load("vgae/model_checkpoints/best_vgae_model_improved_edge_dropout_10_50_world.pt"))
+    model.load_state_dict(torch.load("vgae/model_checkpoints/best_vgae_model_experiment_edge_dropout_10_50_world.pt"))
     return model
 
 def main():
