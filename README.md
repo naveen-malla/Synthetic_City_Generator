@@ -36,4 +36,4 @@ transformer/gpt4o-mini/src
 - get_openai_model_predictions.py gets the predictions of the model and saves it in a json
 - get_predicted_coordinates.py merges together the input and output coordinates that are formatted seperately in the output json to form the full sequence of cooridnates of the city to be plotted.
 
-
+vgae/src
