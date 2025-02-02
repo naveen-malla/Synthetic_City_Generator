@@ -169,10 +169,10 @@ def main():
     lora_dropout = 0.1
 
     # Training configuration
-    num_train_epochs = 8
-    per_device_train_batch_size = 3
-    gradient_accumulation_steps = 2
-    learning_rate = 2e-4
+    num_train_epochs = 100
+    gradient_accumulation_steps = 4
+    per_device_train_batch_size = 2
+    learning_rate = 1e-4
     weight_decay = 0.1
     max_grad_norm = 1.0
     warmup_ratio = 0.1
@@ -180,10 +180,13 @@ def main():
 
     # Load the dataset
     dataset_path = os.path.join(DATASET_DIR, 'train_10_50_nodes_world_center.json')
+    test_dataset_path = os.path.join(DATASET_DIR, 'test_10_50_nodes_world_center.json')
     dataset = load_dataset(dataset_path)
+    dataset_test = load_dataset(test_dataset_path)
 
     # Create test example before training
-    test_example = create_test_example(dataset)
+    test_example = create_test_example(dataset_test)
+
 
     # Load model and tokenizer with device
     model, tokenizer, device = load_model_and_tokenizer(model_name, {"": 0})
