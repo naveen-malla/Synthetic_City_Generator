@@ -1,39 +1,47 @@
-# Synthetic_City_Generator
 
-run pip install -r requirements.txt
+Run `pip install -r requirements.txt` to install the required dependencies.
 
-Data preprocessing. 
+## Data Preprocessing 
 
-data_preprocessing/src/
-- initial_EDA and quantize_and_inverse_EDA.ipynb are used for initial data analysis.
-- countries.csv contains all ISO countries
-- collect_cities.py to collect all cities around the world for each country
-- get_coordinates_data.py and get_adj_matrices_data.py gets the coordinate data and the adjacency data and transforms it to fit for the project needs.
-- split_datasets.py splits the whole datset into test train and validation sets with 70-15-15 split.
-- the dataset for cities all over the world is too large to be uploaded to the repository so it has to be downloaded by running the respective slides. this data will be used to train the regression models and Variational Graph Auto Encoder (VGAE).
+### Location: data_preprocessing/src/
+- `initial_EDA` and `quantize_and_inverse_EDA.ipynb` are used for initial data analysis.
+- `countries.csv` contains all ISO countries.
+- `collect_cities.py` collects all cities worldwide for each country.
+- `get_coordinates_data.py` and `get_adj_matrices_data.py` retrieve coordinate data and adjacency data, transforming them to fit the project requirements.
+- `split_datasets.py` splits the entire dataset into train, test, and validation sets with a 70-15-15 split.
+- Note: The global cities dataset is too large for repository upload and must be downloaded by running the respective scripts. This data will be used to train regression models and Variational Graph Auto Encoder (VGAE).
 
-Implementation.
+## Implementation
 
-regression/src/
-- regression_single_coord_prediction.py contains code to test each of the 4 regression models individually for the task of predicting the next single coordinate and show the results along with visualisations.
-- regression_multiple_coords_prediction.py contains code to test all 4 regression models simultaneously for the tasking of predicting multiple coordinates at once and show the results along with visualisations..
+### Regression Models (regression/src/)
+- `regression_single_coord_prediction.py` tests four regression models individually for predicting the next single coordinate, including visualizations.
+- `regression_multiple_coords_prediction.py` tests all four regression models simultaneously for predicting multiple coordinates, including visualizations.
 
-transformer/llama
-- dataset folder contains already contains the dataset to train the llama model in json format.
+### Transformer Models
 
-transformer/llama/src
-- llama_prompt.txt contains the prompt used to create the dataset to train the llama model
-- fine_tune_data_prep_llama.py creates the datset in json format to tain the llama model
-- fine_tune_llama.py trains the llama model and generates output for a sample test set city
-- generate_coordinates_plot.py shows the comparision plot of original and the predicted coordinates
+#### LLaMA (transformer/llama)
+- The dataset folder contains prepared data in JSON format for training the LLaMA model.
 
-transformer/gpt4o-mini
-- dataset folder contains already contains the dataset to train the gpt4o-mini model in json format. it also contains the predictions obtained
+##### transformer/llama/src
+- `llama_prompt.txt` contains the prompt used for dataset creation.
+- `fine_tune_data_prep_llama.py` creates the JSON format dataset.
+- `fine_tune_llama.py` trains the model and generates output for sample test cities.
+- `generate_coordinates_plot.py` displays comparison plots of original and predicted coordinates.
 
-transformer/gpt4o-mini/src
-- this folder does not contain the code to train the model because the finetuning was done on open ai playground.
-- finetune_data_prep.py prepares the dataset in json format to train the model
-- get_openai_model_predictions.py gets the predictions of the model and saves it in a json
-- get_predicted_coordinates.py merges together the input and output coordinates that are formatted seperately in the output json to form the full sequence of cooridnates of the city to be plotted.
+#### GPT4-Mini (transformer/gpt4o-mini)
+- The dataset folder contains prepared data in JSON format and model predictions.
 
-vgae/src
+##### transformer/gpt4o-mini/src
+- Note: Training code is not included as fine-tuning was performed on OpenAI playground.
+- `finetune_data_prep.py` prepares the dataset in JSON format.
+- `get_openai_model_predictions.py` generates and saves model predictions.
+- `get_predicted_coordinates.py` merges input and output coordinates from the JSON output.
+
+### VGAE
+- The model_checkpoints folder contains saved best models for each version, enabling direct inference without retraining.
+
+#### vgae/src
+- `VGAE.py` is the main training and testing code for specified node ranges (10-50 nodes and 100-500 nodes).
+- `vgae_experiment_*.py` files contain modifications addressing the overconnectivity issue in the main model.
+- `plot_metrics_progression.py` visualizes metric progression during training.
+- `plot_results.py` visualizes results from the test set.
