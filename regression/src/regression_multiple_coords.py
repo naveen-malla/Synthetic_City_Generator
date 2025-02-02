@@ -26,17 +26,11 @@ class CityCoordinateDataset:
         coordinates = np.column_stack((coords['y'], coords['x'])).astype(np.float32)
         return coordinates
 
-def create_multi_step_sequences(coordinates, input_length=5, predict_length=3):
-    sequences = []
-    targets = []
-    
-    for i in range(len(coordinates) - input_length - predict_length + 1):
-        input_seq = coordinates[i:i+input_length]
-        target_seq = coordinates[i+input_length:i+input_length+predict_length]
-        sequences.append(input_seq.flatten())
-        targets.append(target_seq.flatten())
-    
-    return np.array(sequences), np.array(targets)
+def create_dataset(coordinates, seq_length=5):
+    input_seq = coordinates[:seq_length].flatten()
+    target_seq = coordinates[seq_length:]
+    return input_seq, target_seq.flatten()
+
 
 def train_model(X_train, y_train, model_type='linear', alpha=1.0):
     if model_type == 'linear':
@@ -54,13 +48,9 @@ def train_model(X_train, y_train, model_type='linear', alpha=1.0):
     
     return model, scaler
 
-def evaluate_model(model, X_test, y_test, scaler, predict_length):
+def evaluate_model(model, X_test, y_test, scaler):
     X_scaled = scaler.transform(X_test)
     predictions = model.predict(X_scaled)
-    
-    # Reshape predictions and targets for proper evaluation
-    predictions_reshaped = predictions.reshape(-1, predict_length, 2)
-    y_test_reshaped = y_test.reshape(-1, predict_length, 2)
     
     mse = mean_squared_error(y_test, predictions)
     r2 = r2_score(y_test, predictions)
@@ -69,92 +59,113 @@ def evaluate_model(model, X_test, y_test, scaler, predict_length):
         'mse': mse,
         'rmse': np.sqrt(mse),
         'r2': r2,
-        'predictions': predictions_reshaped,
-        'actual': y_test_reshaped
+        'predictions': predictions
     }
 
-def visualize_predictions(actual, predicted, title="Predictions vs Actual"):
+def visualize_full_path(original, predicted, title="Original vs Predicted Path"):
     plt.figure(figsize=(12, 8))
     
-    colors = ['blue', 'green', 'red']
-    for step in range(actual.shape[1]):
-        plt.scatter(actual[:, step, 0], actual[:, step, 1], 
-                   label=f'Actual Step {step+1}', 
-                   alpha=0.6, 
-                   c=colors[step], 
-                   marker='o')
-        plt.scatter(predicted[:, step, 0], predicted[:, step, 1], 
-                   label=f'Predicted Step {step+1}', 
-                   alpha=0.6, 
-                   c=colors[step], 
-                   marker='x')
+    # Plot original path
+    plt.plot(original[:, 0], original[:, 1], 'b-', label='Original Path', linewidth=2)
+    plt.scatter(original[:5, 0], original[:5, 1], c='green', marker='o', 
+               s=100, label='First 5 Points', zorder=5)
+    plt.scatter(original[5:, 0], original[5:, 1], c='blue', marker='o', 
+               s=80, label='Original Remaining', zorder=4)
+    
+    # Plot predicted path
+    plt.plot(predicted[:, 0], predicted[:, 1], 'r--', label='Predicted Path', linewidth=2)
+    plt.scatter(predicted[5:, 0], predicted[5:, 1], c='red', marker='x', 
+               s=80, label='Predicted Points', zorder=3)
     
     plt.xlabel('Y Coordinate')
     plt.ylabel('X Coordinate')
     plt.title(title)
-    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.legend()
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.show()
 
+def compare_predictions(test_city, models, scalers):
+    """
+    Compare predictions from all models for a single test city
+    """
+    input_seq, target_seq = create_dataset(test_city)
+    num_predictions = len(test_city) - 5  # Dynamic number of predictions needed
+    
+    print("\nOriginal Coordinates:")
+    print("First 5 points (Input):")
+    print(test_city[:5])
+    print("\nRemaining points (Target):")
+    print(test_city[5:])
+    
+    for model_type, model in models.items():
+        print(f"\n{model_type.upper()} Model Predictions:")
+        input_scaled = scalers[model_type].transform([input_seq])
+        predicted_seq = model.predict(input_scaled).reshape(-1, 2)[:num_predictions]  # Limit predictions
+        full_predicted = np.vstack((test_city[:5], predicted_seq))
+        
+        print("Predicted remaining points:")
+        print(predicted_seq)
+        
+        visualize_full_path(test_city, full_predicted, 
+                          f"{model_type.capitalize()} Model: Original vs Predicted Path")
+
+
 def main():
+    # Set paths to your data directories
     base_path = 'data/coordinates/world/center/original'
     train_folder = os.path.join(base_path, 'train')
     test_folder = os.path.join(base_path, 'test')
     
-    input_length = 5
-    predict_length = 3
-    model_types = ['linear', 'ridge', 'lasso', 'elasticnet']
+    # Model parameters
+    seq_length = 5
     alpha = 1.0
     
+    # Load and prepare training data
     train_dataset = CityCoordinateDataset(train_folder)
-    train_sequences = []
+    train_inputs = []
     train_targets = []
     
     print(f"Processing {len(train_dataset)} training cities...")
+    
+    # Create training dataset
     for i in range(len(train_dataset)):
         coordinates = train_dataset[i]
-        sequences, targets = create_multi_step_sequences(coordinates, input_length, predict_length)
-        if len(sequences) > 0:
-            train_sequences.append(sequences)
-            train_targets.append(targets)
+        input_seq, target_seq = create_dataset(coordinates, seq_length)
+        train_inputs.append(input_seq)
+        # Pad each target sequence to the same length as the longest sequence
+        train_targets.append(target_seq)
     
-    X_train = np.vstack(train_sequences)
-    y_train = np.vstack(train_targets)
-    print(f"Training data shape: {X_train.shape}, {y_train.shape}")
+    # Convert inputs to numpy array (this is safe as all inputs have same length)
+    X_train = np.array(train_inputs)
     
-    test_dataset = CityCoordinateDataset(test_folder)
-    test_sequences = []
-    test_targets = []
+    # Find the maximum length among target sequences
+    max_length = max(len(target) for target in train_targets)
     
-    print(f"\nProcessing {len(test_dataset)} test cities...")
-    for i in range(len(test_dataset)):
-        coordinates = test_dataset[i]
-        sequences, targets = create_multi_step_sequences(coordinates, input_length, predict_length)
-        if len(sequences) > 0:
-            test_sequences.append(sequences)
-            test_targets.append(targets)
+    # Pad all target sequences to max_length
+    y_train = np.array([
+        np.pad(target, (0, max_length - len(target)), 'constant')
+        for target in train_targets
+    ])
     
-    X_test = np.vstack(test_sequences)
-    y_test = np.vstack(test_targets)
-    print(f"Test data shape: {X_test.shape}, {y_test.shape}")
-    
-    for model_type in model_types:
+    # Train all models
+    models = {}
+    scalers = {}
+    for model_type in ['linear', 'ridge', 'lasso', 'elasticnet']:
         print(f"\nTraining {model_type} regression model...")
         model, scaler = train_model(X_train, y_train, model_type=model_type, alpha=alpha)
-        
-        print(f"Evaluating {model_type} model...")
-        results = evaluate_model(model, X_test, y_test, scaler, predict_length)
-        print(f"{model_type.capitalize()} Model Performance:")
-        print(f"RMSE: {results['rmse']:.4f}")
-        print(f"R2 Score: {results['r2']:.4f}")
-        
-        sample_size = min(1000, len(results['actual']))
-        visualize_predictions(
-            results['actual'][:sample_size], 
-            results['predictions'][:sample_size],
-            f"{model_type.capitalize()} Model: Multi-step Predictions"
-        )
+        models[model_type] = model
+        scalers[model_type] = scaler
+    
+    # Load test data
+    test_dataset = CityCoordinateDataset(test_folder)
+    
+    # Compare predictions for first test city
+    if len(test_dataset) > 0:
+        test_city = test_dataset[0]
+        compare_predictions(test_city, models, scalers)
+
+
 
 if __name__ == "__main__":
     main()
