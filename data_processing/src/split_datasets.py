@@ -7,7 +7,7 @@ import json
 from tabulate import tabulate
 
 # Constants
-NODE_RANGES = [(10, 50), (50, 100), (100, 500), (500, 1000), (1000, 2000)]
+NODE_RANGES = [(10, 50), (50, 100), (100, 500)]
 SPLIT_RATIOS = {'train': 0.7, 'valid': 0.15, 'test': 0.15}
 BASE_PATHS = {
     'adj': 'adj_matrices',
