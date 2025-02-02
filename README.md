@@ -28,7 +28,7 @@ Run `pip install -r requirements.txt` to install the required dependencies.
 - `fine_tune_llama.py` trains the model and generates output for sample test cities.
 - `generate_coordinates_plot.py` displays comparison plots of original and predicted coordinates.
 
-#### GPT4-Mini (transformer/gpt4o-mini)
+#### GPT4o-Mini (transformer/gpt4o-mini)
 - The dataset folder contains prepared data in JSON format and model predictions.
 
 ##### transformer/gpt4o-mini/src
