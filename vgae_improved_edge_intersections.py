@@ -216,11 +216,12 @@ def train_epoch(model, optimizer, data):
 
     kl_loss = (0.05 / data.x.size(0)) * model.kl_loss()
     
-    # Add density penalty
-    density_loss = torch.mean((torch.sum(adj_pred, dim=1) - torch.sum(adj_orig, dim=1))**2)
-    density_weight = 0.1
-
-    total_loss = recon_loss + kl_loss + density_weight * density_loss
+     # Add geometric loss
+    node_positions = data.x[:, :2].cpu().numpy()  
+    geo_loss = compute_geometric_loss(adj_pred, node_positions)
+    geo_weight = 0.1  
+    
+    total_loss = recon_loss + kl_loss + geo_weight * geo_loss
 
     total_loss.backward()
     optimizer.step()
@@ -252,7 +253,7 @@ def evaluate(model, data, adj_matrix):
     with torch.no_grad():
         z = model.encode(data.x, data.edge_index)
         pred_adj = torch.sigmoid(torch.matmul(z, z.t())).detach().to('cpu').numpy()
-        binary_pred_adj = (pred_adj > 0.5).astype(float)
+        binary_pred_adj = (pred_adj > 0.9).astype(float)
         auc = roc_auc_score(adj_matrix.flatten(), pred_adj.flatten())
         ap = average_precision_score(adj_matrix.flatten(), pred_adj.flatten())
         accuracy = (binary_pred_adj == adj_matrix).mean()
@@ -268,7 +269,7 @@ def final_evaluation(model, matrices, features_list, processed_cities):
             data = Data(x=features, edge_index=edge_index).to(device)
             z = model.encode(data.x, data.edge_index)
             pred_adj = torch.sigmoid(torch.matmul(z, z.t())).detach().to('cpu').numpy()
-            binary_pred_adj = (pred_adj > 0.5).astype(float)
+            binary_pred_adj = (pred_adj > 0.9).astype(float)
             
         auc = roc_auc_score(adj_matrix.flatten(), pred_adj.flatten())
         ap = average_precision_score(adj_matrix.flatten(), pred_adj.flatten())
