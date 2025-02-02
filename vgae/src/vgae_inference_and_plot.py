@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from torch_geometric.utils import dense_to_sparse
 from torch_geometric.nn import VGAE, GCNConv
 import os
-from vgae.VGAE import VariationalGCNEncoder
+from VGAE import VariationalGCNEncoder
 
 
 def create_node_features(coordinates, normalize=True):
@@ -161,8 +161,7 @@ def main():
             dropout=0.3
         )
     ).to(device)
-    
-    model.load_state_dict(torch.load('model_checkpoints/best_vgae_model_improved_I_as_node_features_10_50_world.pt', map_location=device, weights_only=True))
+    model.load_state_dict(torch.load('vgae/model_checkpoints/best_vgae_model_improved_I_as_node_features_10_50_world.pt', map_location=device, weights_only=True))
     model.eval()
     
     with torch.no_grad():
