@@ -103,52 +103,61 @@ def calculate_errors(original, predicted):
         'percentage': np.mean(relative_errors)
     }
 
-def plot_model_comparison(original_full, predicted, initial, model_name, city_name, errors):
-    plt.style.use('bmh')
+
+def plot_model_comparison(original, predicted, initial, model_name, city_name, errors):
+    # Convert inputs to numpy arrays if they aren't already
+    original = np.array(original)
+    predicted = np.array(predicted)
+    initial = np.array(initial)
     
-    # Create figure with a light gray background
+    # Set style
+    plt.style.use('seaborn-v0_8-darkgrid')
+    
+    # Create figure
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 7))
-    fig.patch.set_facecolor('#f0f0f0')
     
-    # Common plotting parameters
-    plot_params = {
-        'original': {'color': '#1f77b4', 'alpha': 0.7, 's': 80, 'label': 'Original Coordinates'},
-        'initial': {'color': '#2ecc71', 'alpha': 1.0, 's': 120, 'label': 'Initial Coordinates', 'edgecolor': 'white'},
-        'predicted': {'color': '#e74c3c', 'alpha': 0.7, 's': 80, 'label': 'Predicted Coordinates'}
+    # Define color scheme
+    colors = {
+        'original': '#2ECC71',  # Green
+        'predicted': '#E74C3C',  # Red
+        'initial': 'royalblue'  # Blue
     }
     
-    # Left subplot - Original coordinates
-    ax1.scatter(original_full[:, 0], original_full[:, 1], **plot_params['original'])
-    ax1.scatter(initial[:, 0], initial[:, 1], **plot_params['initial'])
-    ax1.set_title("Original Coordinates", fontsize=12, pad=15)
-    ax1.set_xlabel("Latitude", fontsize=10)
-    ax1.set_ylabel("Longitude", fontsize=10)
-    ax1.grid(True, linestyle='--', alpha=0.7)
-    ax1.set_facecolor('white')
-    ax1.legend(frameon=True, facecolor='white', edgecolor='none')
+    # Plot original coordinates
+    ax1.scatter(original[:, 0], original[:, 1], 
+                c=colors['original'], marker='o', s=100,
+                label='Original Coordinates')
+    ax1.scatter(initial[:, 0], initial[:, 1], 
+                c=colors['initial'], marker='o', s=120, 
+                label='Initial Coordinates')
+    ax1.set_title('Original Coordinates', fontsize=14, pad=15)
+    ax1.set_xlabel('Latitude', fontsize=12)
+    ax1.set_ylabel('Longitude', fontsize=12)
+    ax1.legend()
     
-    # Right subplot - Predicted coordinates
-    ax2.scatter(predicted[:, 0], predicted[:, 1], **plot_params['predicted'])
-    ax2.scatter(initial[:, 0], initial[:, 1], **plot_params['initial'])
-    ax2.set_title("Predicted Coordinates", fontsize=12, pad=15)
-    ax2.set_xlabel("Latitude", fontsize=10)
-    ax2.set_ylabel("Longitude", fontsize=10)
-    ax2.grid(True, linestyle='--', alpha=0.7)
-    ax2.set_facecolor('white')
-    ax2.legend(frameon=True, facecolor='white', edgecolor='none')
+    # Plot predicted coordinates
+    ax2.scatter(predicted[:, 0], predicted[:, 1], 
+                c=colors['predicted'], marker='o', s=100, 
+                label='Predicted Coordinates')
+    ax2.scatter(initial[:, 0], initial[:, 1], 
+                c=colors['initial'], marker='o', s=120, 
+                label='Initial Coordinates')
+    ax2.set_title('Predicted Coordinates', fontsize=14, pad=15)
+    ax2.set_xlabel('Latitude', fontsize=12)
+    ax2.set_ylabel('Longitude', fontsize=12)
+    ax2.legend()
     
-    # Main title with metrics
-    title = f"{model_name} Predictions for {city_name}\n"
-    metrics = f"Mean Euclidean Distance: {errors['euclidean']:.2f} | Mean Percentage Error: {errors['percentage']:.2f}%"
+    # Add main title with metrics
+    plt.suptitle(
+        f'{model_name} Predictions for {city_name}\n'
+        f'Euclidean Distance: {errors["euclidean"]:.2f} | Percentage Error: {errors["percentage"]:.2f}%',
+        fontsize=16,
+        y=1.05
+    )
     
-    # Reduced spacing adjustments
-    plt.subplots_adjust(top=0.9)  # Changed from 0.85
-    plt.suptitle(title + metrics, fontsize=14, y=0.95)  # Changed from 0.98
-    
-    # Tighter layout with less space at top
-    plt.tight_layout(rect=[0, 0, 1, 0.93])  # Changed from 0.90
-    
+    plt.tight_layout()
     plt.show()
+
 
 
 def evaluate_model_performance(test_dataset, trained_models, seq_length=5):
@@ -282,8 +291,13 @@ def main():
         print(f"Number of coordinates: Original = {len(original)}, Predicted = {len(predicted)}")
         
         errors = calculate_errors(original, predicted)
-        plot_model_comparison(test_city, predicted, test_city[:seq_length], 
-                            name, city_name, errors)
+        
+        # Get initial coordinates (first seq_length coordinates from original)
+        initial_coords = original[:seq_length]
+        
+        # Call the plot function with original, predicted, and initial coordinates
+        plot_model_comparison(original, predicted, initial_coords, name, city_name, errors)
+
 
 
 if __name__ == "__main__":
