@@ -16,10 +16,10 @@ def plot_coordinate_comparison(original_coords, generated_coords, initial_coords
     
     # Plot original coordinates
     ax1.scatter(original_coords[:, 1], original_coords[:, 0], 
-                c='royalblue', marker='o', s=100, alpha=0.6,
+                c='#2ECC71', marker='o', s=100,
                 label='Original Coordinates')
     ax1.scatter(initial_coords[:, 1], initial_coords[:, 0], 
-                c='green', marker='o', s=120, alpha=0.6,
+                c='royalblue', marker='o', s=120, 
                 label='Initial Coordinates')
     ax1.set_title('Original Coordinates', fontsize=14, pad=15)
     ax1.grid(True, linestyle='--', alpha=0.7)
@@ -29,10 +29,10 @@ def plot_coordinate_comparison(original_coords, generated_coords, initial_coords
     
     # Plot generated coordinates
     ax2.scatter(generated_coords[:, 1], generated_coords[:, 0], 
-                c='crimson', marker='o', s=100, alpha=0.6,
+                c='#E74C3C', marker='o', s=100, 
                 label='Predicted Coordinates')
     ax2.scatter(initial_coords[:, 1], initial_coords[:, 0], 
-                c='green', marker='o', s=120, alpha=0.6,
+                c='royalblue', marker='o', s=120, 
                 label='Initial Coordinates')
     ax2.set_title('Generated Coordinates', fontsize=14, pad=15)
     ax2.grid(True, linestyle='--', alpha=0.7)
@@ -47,7 +47,7 @@ def plot_coordinate_comparison(original_coords, generated_coords, initial_coords
 
 
 
-# Convert your coordinate lists
+# coordinates of test city 1
 
 
 initial = [
@@ -98,34 +98,7 @@ generated = [
 # Plot the coordinates
 plot_coordinate_comparison(original, generated, initial)
 
-
-# generated = [
-#     (167, 35),
-#     (50, 181),
-#     (30, 104),
-#     (255, 14),
-#     (252, 0),
-#     (250, 1),
-#     (243, 4),
-#     (175, 35),
-#     (117, 181),
-#     (88, 104),
-#     (148, 14),
-#     (230, 0),
-#     (227, 1),
-#     (219, 4),
-#     (202, 19),
-#     (185, 117),
-#     (168, 141),
-#     (152, 164),
-#     (136, 187),
-#     (120, 208),
-#     (105, 229),
-#     (89, 251)
-# ]
-
-
-
+# cooridnats of test city 2
 
 # initial = [
 #     (222, 0),
@@ -204,67 +177,8 @@ plot_coordinate_comparison(original, generated, initial)
 # (108, 156),
 # (110, 174)
 # ]
-#lstm
-
-# generated = [
-
-#     (0, 212), (8, 215), (10, 183), (16, 15), (27, 185), (40, 225), (58, 164), (75, 220), 
-#     (119.93109, 124.0029), (120.46889, 125.12337), (120.001495, 124.37708), (118.72854, 122.48808),
-#     (117.060394, 120.02617), (115.336685, 117.450874), (113.80166, 115.0871), (112.60469, 113.13039),
-#     (111.81658, 111.671814), (111.45112, 110.72852), (111.48517, 110.27048), (111.87392, 110.24084),
-#     (112.56174, 110.57004), (113.48923, 111.18458), (114.597595, 112.012566), (115.831024, 112.986664),
-#     (117.13788, 114.045494), (118.47082, 115.13385), (119.78623, 116.202034), (121.04273, 117.204315),
-#     (122.19906, 118.09676), (123.21105, 118.834076), (124.02752, 119.36538), (124.5849, 119.629005),
-#     (124.80031, 119.54572), (124.56287, 119.01048), (123.72384, 117.88308), (122.08573, 115.97842),
-#     (119.39435, 113.05955), (115.338264, 108.83863), (109.567406, 102.99617), (101.74453, 95.23154)
-# ]
 
 
-# generated = [
-# (130, 130),
-# (95, 123),
-# (0, 94),
-# (187, 0),
-# (150, 130),
-# (150, 140),
-# (135, 150),
-# (140, 150),
-# (135, 160),
-# (140, 160),
-# (150, 160),
-# (150, 170),
-# (140, 170),
-# (135, 170),
-# (135, 180),
-# (140, 180),
-# (150, 180),
-# (150, 190),
-# (140, 190),
-# (135, 190),
-# (135, 200),
-# (140, 200),
-# (150, 200)
-# ]
-
-# generated = [
-#     (80, 123),
-#     (81, 122),
-#     (81, 124),
-#     (89, 100),
-#     (93, 120),
-#     (100, 89),
-#     (120, 124),
-#     (122, 81),
-#     (80, 123),
-#     (123, 121),
-#     (89, 121),
-#     (89, 120),
-#     (123, 123),
-#     (123, 81),
-#     (124, 81),
-#     (122, 81),
-#     (124, 89),
-#     (100, 93)
-# ]
-
+# # Plot the coordinates
+# plot_coordinate_comparison(original, generated, initial)
 
