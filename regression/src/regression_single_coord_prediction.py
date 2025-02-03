@@ -53,76 +53,60 @@ def train_model(X_train, y_train, model_type='linear', alpha=1.0):
     
     return model, scaler
 
+import matplotlib.pyplot as plt
+import numpy as np
 
 def visualize_predictions(actual, predicted, title="Enhanced Predictions vs Actual"):
     # Set style parameters
-    plt.style.use('bmh')
+    plt.style.use('seaborn-v0_8-darkgrid')
     
-    # Create figure with custom styling
+    # Create figure
     fig, ax = plt.subplots(figsize=(14, 10))
-    fig.patch.set_facecolor('#e9ecef')  # Soft gray
-    ax.set_facecolor('#f8f9fa')  # Very light blue-gray
-    
-    # Enhanced grid styling
-    ax.grid(True, linestyle='--', linewidth=2, color='#e9ecef', zorder=0)
-    ax.set_axisbelow(True)
     
     # Plot points with enhanced styling
     ax.scatter(actual[:, 1], actual[:, 0],  
-            label='Actual', 
-            alpha=0.6, 
-               c='blue', 
+               label='Actual', 
+               c='#2ECC71',  # Green shade from the first code
                marker='o', 
-               s=50)
+               s=100)
 
     ax.scatter(predicted[:, 1], predicted[:, 0], 
-            label='Predicted', 
-             alpha=0.6, 
-               c='red', 
+               label='Predicted', 
+               c='#E74C3C',  # Red shade from the first code
                marker='x', 
-               s=50)
+               s=100)
 
-    # Plot connecting lines with swapped coordinates
+    # Plot connecting lines
     for i in range(len(actual)):
         ax.plot([actual[i,1], predicted[i,1]], 
                 [actual[i,0], predicted[i,0]], 
-                color='#2b9348',
+                color='royalblue',  # Blue shade from the first code
                 linestyle='-',
                 linewidth=1,
                 alpha=0.3,
                 zorder=2)
 
-    # Update labels
-    ax.set_xlabel('X Coordinate', fontsize=12, fontweight='bold', labelpad=10)
-    ax.set_ylabel('Y Coordinate', fontsize=12, fontweight='bold', labelpad=10)
-
-    ax.set_title(title, fontsize=14, fontweight='bold', pad=20)
+    # Update labels and title
+    ax.set_xlabel('X Coordinate', fontsize=12)
+    ax.set_ylabel('Y Coordinate', fontsize=12)
+    ax.set_title(title, fontsize=14, pad=15)
+    
+    # Enhance grid
+    ax.grid(True, linestyle='--', alpha=0.7)
     
     # Custom legend styling
     legend = ax.legend(frameon=True, 
-                      facecolor='white', 
-                      edgecolor='#dee2e6',
-                      fontsize=10,
-                      loc='upper right',
-                      borderpad=1,
-                      shadow=True)
-    
-    # Enhance spines
-    for spine in ax.spines.values():
-        spine.set_color('#dee2e6')
-        spine.set_linewidth(1.2)
+                       fontsize=10,
+                       loc='upper right')
     
     # Adjust tick parameters
     ax.tick_params(axis='both', 
-                  which='major', 
-                  labelsize=10, 
-                  length=5, 
-                  width=1.2, 
-                  colors='#495057',
-                  grid_alpha=0.3)
+                   which='major', 
+                   labelsize=10)
     
     plt.tight_layout()
     plt.show()
+
 
 
 def evaluate_model(model, X_test, y_test, scaler):
@@ -147,7 +131,7 @@ def main():
     
     # Model parameters
     seq_length = 5
-    model_type = 'ridge'
+    model_type = 'elasticnet'
     alpha = 1.0
     
     # Load and prepare training data
@@ -198,7 +182,7 @@ def main():
     visualize_predictions(
         y_test[:sample_size], 
         results['predictions'][:sample_size],
-        "Ridge: First 1000 Predictions vs Actual"
+        "ElasticNet: First 1000 Predictions vs Actual"
     )
     
    
