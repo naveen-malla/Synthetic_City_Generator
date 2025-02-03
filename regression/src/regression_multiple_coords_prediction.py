@@ -146,19 +146,18 @@ def plot_model_comparison(original, predicted, initial, model_name, city_name, e
     ax2.set_xlabel('Latitude', fontsize=12)
     ax2.set_ylabel('Longitude', fontsize=12)
     ax2.legend()
+
+    # Main title with metrics
+    title = f"{model_name} Predictions for {city_name}\n"
+    metrics = f"Euclidean Distance: {errors['euclidean']:.2f} | Percentage Error: {errors['percentage']:.2f}%"
     
-    # Add main title with metrics
-    plt.suptitle(
-        f'{model_name} Predictions for {city_name}\n'
-        f'Euclidean Distance: {errors["euclidean"]:.2f} | Percentage Error: {errors["percentage"]:.2f}%',
-        fontsize=16,
-        y=1.05
-    )
+    # Reduced spacing adjustments
+    plt.subplots_adjust(top=0.9)  # Changed from 0.85
+    plt.suptitle(title + metrics, fontsize=14, y=0.95)  # Changed from 0.98
     
-    plt.tight_layout()
+    # Tighter layout with less space at top
+    plt.tight_layout(rect=[0, 0, 1, 0.93])  # Changed from 0.90
     plt.show()
-
-
 
 def evaluate_model_performance(test_dataset, trained_models, seq_length=5):
     """
